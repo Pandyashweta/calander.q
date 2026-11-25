@@ -14,7 +14,7 @@ export type CalendarColorKey =
   | 'indigo'
   | 'teal';
 
-export type CalendarLayerType = 'personal' | 'cultural' | 'google';
+export type CalendarLayerType = 'personal' | 'cultural' | 'google' | 'world' | 'custom';
 
 export type EventCategory =
   | 'event'
@@ -22,6 +22,28 @@ export type EventCategory =
   | 'memorial'
   | 'workspace'
   | 'plan';
+
+export type RecurrenceFrequency = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface EventRecurrence {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  daysOfWeek?: number[]; // 0 = Sun, 1 = Mon, ...
+  until?: string; // YYYY-MM-DD
+  count?: number;
+}
+
+export interface EventReminder {
+  id: string;
+  minutes: number;
+  method: 'popup' | 'notification' | 'email';
+}
+
+export interface EventAttendee {
+  email: string;
+  name?: string;
+  status?: 'accepted' | 'declined' | 'tentative' | 'needsAction';
+}
 
 export interface CalendarLayer {
   id: string;
@@ -62,6 +84,11 @@ export interface CalendarEvent {
   location?: string;
   notes?: string;
   attendees?: string[];
+  attendeesList?: EventAttendee[];
+  recurrence?: EventRecurrence;
+  reminders?: EventReminder[];
+  color?: CalendarColorKey;
+  timezone?: string;
   source?: 'local' | 'google';
   googleCalendarId?: string;
   googleEventId?: string;
@@ -90,6 +117,7 @@ export interface FestivalItem {
 export interface GujaratiPanchang {
   dateKey: string;
   vikramSamvat: number;
+  shakaYear: number;
   monthEn: string;
   monthGu: string;
   isAdhik: boolean;
@@ -102,6 +130,12 @@ export interface GujaratiPanchang {
   vaarGu: string;
   nakshatraEn: string;
   nakshatraGu: string;
+  yogaEn: string;
+  karanaEn: string;
+  rituEn: string;
+  samvatsaraEn: string;
+  rahuKaal: string;
+  abhijitMuhurat: string;
   moonIllumination: number; // 0..100
   moonPhaseLabel: string;
   specialTithi?: {
@@ -124,6 +158,7 @@ export type WorldCalendarSystemId =
   | 'gujarati-vikram'
   | 'hindu-purnimanta'
   | 'indian-saka'
+  | 'nepali-bs'
   | 'tamil'
   | 'malayalam'
   | 'bengali'
@@ -152,7 +187,35 @@ export type WorldCalendarSystemId =
   | 'julian'
   | 'french-republican'
   | 'maya'
-  | 'aztec';
+  | 'aztec'
+  // Civic, Standard & Organizational
+  | 'iso-week'
+  | 'academic'
+  | 'fiscal';
+
+export interface UserAccount {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  provider: 'email' | 'google' | 'apple';
+  emailVerified: boolean;
+  primaryCalendarId?: string;
+  timezone?: string;
+  createdAt: string;
+}
+
+export interface CalendarTask {
+  id: string;
+  title: string;
+  dueDate?: string;
+  dueTime?: string;
+  completed: boolean;
+  priority?: 'low' | 'medium' | 'high';
+  notes?: string;
+  category?: string;
+  createdAt: string;
+}
 
 export interface WorldCalendarSystemMeta {
   id: WorldCalendarSystemId;

@@ -56,7 +56,7 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'indian',
     region: 'India',
     wikiUrl: 'https://en.wikipedia.org/wiki/Hindu_calendar',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     id: 'indian-saka',
@@ -64,7 +64,15 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'indian',
     region: 'India (Official Civil)',
     wikiUrl: 'https://en.wikipedia.org/wiki/Indian_national_calendar',
-    defaultEnabled: true,
+    defaultEnabled: false,
+  },
+  {
+    id: 'nepali-bs',
+    name: 'Nepali (Bikram Sambat)',
+    group: 'indian',
+    region: 'Nepal',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Bikram_Sambat',
+    defaultEnabled: false,
   },
   {
     id: 'tamil',
@@ -122,7 +130,7 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'religious',
     region: 'Global Islamic',
     wikiUrl: 'https://en.wikipedia.org/wiki/Islamic_calendar',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     id: 'hebrew',
@@ -130,7 +138,7 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'religious',
     region: 'Israel & Global Jewish',
     wikiUrl: 'https://en.wikipedia.org/wiki/Hebrew_calendar',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     id: 'solar-hijri',
@@ -172,7 +180,7 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'asian',
     region: 'China & Sinosphere',
     wikiUrl: 'https://en.wikipedia.org/wiki/Chinese_calendar',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     id: 'japanese',
@@ -280,6 +288,30 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     wikiUrl: 'https://en.wikipedia.org/wiki/Aztec_calendar',
     defaultEnabled: false,
   },
+  {
+    id: 'iso-week',
+    name: 'ISO Week Calendar (ISO 8601)',
+    group: 'historical',
+    region: 'International (Standard ISO 8601)',
+    wikiUrl: 'https://en.wikipedia.org/wiki/ISO_week_date',
+    defaultEnabled: false,
+  },
+  {
+    id: 'academic',
+    name: 'Academic Calendar (Semesters)',
+    group: 'historical',
+    region: 'Academic & Universities',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Academic_term',
+    defaultEnabled: false,
+  },
+  {
+    id: 'fiscal',
+    name: 'Fiscal / Financial Calendar (FY)',
+    group: 'historical',
+    region: 'Corporate & Government Finance',
+    wikiUrl: 'https://en.wikipedia.org/wiki/Fiscal_year',
+    defaultEnabled: false,
+  },
 ];
 
 export const DEFAULT_ENABLED_WORLD_CALENDARS: WorldCalendarSystemId[] =
@@ -305,6 +337,56 @@ function gregorianToJdn(y: number, m: number, d: number): number {
 
 function isGregorianLeap(y: number): boolean {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+}
+
+/** Convert JDN back to civil Gregorian date */
+export function jdnToGregorian(jdn: number): { year: number; month: number; day: number } {
+  const a = Math.floor(jdn) + 32044;
+  const b = Math.floor((4 * a + 3) / 146097);
+  const c = a - Math.floor((146097 * b) / 4);
+  const d = Math.floor((4 * c + 3) / 1461);
+  const e = c - Math.floor((1461 * d) / 4);
+  const m = Math.floor((5 * e + 2) / 153);
+  const day = e - Math.floor((153 * m + 2) / 5) + 1;
+  const month = m + 3 - 12 * Math.floor(m / 10);
+  const year = 100 * b + d - 4800 + Math.floor(m / 10);
+  return { year, month, day };
+}
+
+/** Julian Calendar to JDN */
+export function julianToJdn(year: number, month: number, day: number): number {
+  let y = year;
+  let m = month;
+  if (m <= 2) {
+    y -= 1;
+    m += 12;
+  }
+  return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day - 1524;
+}
+
+/** Tabular Islamic Calendar to JDN */
+export function islamicToJdn(year: number, month: number, day: number): number {
+  return (
+    day +
+    Math.ceil(29.5 * (month - 1)) +
+    (year - 1) * 354 +
+    Math.floor((3 + 11 * year) / 30) +
+    1948439
+  );
+}
+
+/** Solar Hijri (Persian) to JDN */
+export function persianToJdn(year: number, month: number, day: number): number {
+  const epBase = year - (year >= 0 ? 474 : 473);
+  const epYear = 474 + (((epBase % 2820) + 2820) % 2820);
+  return (
+    day +
+    (month <= 7 ? (month - 1) * 31 : (month - 1) * 30 + 6) +
+    Math.floor((epYear * 682 - 110) / 2816) +
+    (epYear - 1) * 365 +
+    Math.floor(epBase / 2820) * 1029983 +
+    1948320
+  );
 }
 
 function dayOfYear(date: Date): number {
@@ -411,6 +493,22 @@ function toRegionalSolar(
     formatted: `${dayNum} ${months[bestIdx]} ${eraYear}${eraSuffix ? ' ' + eraSuffix : ''}`,
     shortLabel: `${months[bestIdx]} ${dayNum}`,
   };
+}
+
+function toNepaliBs(date: Date) {
+  return toRegionalSolar(
+    date,
+    [
+      'Baishakh', 'Jestha', 'Ashadh', 'Shrawan', 'Bhadra', 'Ashwin',
+      'Kartik', 'Mangsir', 'Poush', 'Magh', 'Falgun', 'Chaitra',
+    ],
+    [
+      [4, 14], [5, 15], [6, 15], [7, 17], [8, 17], [9, 17],
+      [10, 18], [11, 17], [12, 16], [1, 15], [2, 13], [3, 14],
+    ],
+    -57,
+    'BS'
+  );
 }
 
 function toTamil(date: Date) {
@@ -739,6 +837,19 @@ export function convertToWorldCalendar(
         formatted: s.formatted,
         shortLabel: s.shortLabel,
         detail: 'Official Indian National Solar Calendar',
+        wikiUrl: meta.wikiUrl,
+      };
+    }
+
+    case 'nepali-bs': {
+      const n = toNepaliBs(date);
+      return {
+        id: systemId,
+        name: meta.name,
+        group: meta.group,
+        formatted: n.formatted,
+        shortLabel: n.shortLabel,
+        detail: 'Official Bikram Sambat Calendar of Nepal',
         wikiUrl: meta.wikiUrl,
       };
     }
@@ -1108,6 +1219,74 @@ export function convertToWorldCalendar(
         wikiUrl: meta.wikiUrl,
       };
     }
+
+    case 'iso-week': {
+      const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+      return {
+        id: systemId,
+        name: meta.name,
+        group: meta.group,
+        formatted: `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}-${dayNum}`,
+        shortLabel: `W${weekNo}`,
+        detail: `ISO 8601 Week ${weekNo}, Day ${dayNum} (${DAY_NAMES_SHORT[date.getDay()]})`,
+        wikiUrl: meta.wikiUrl,
+      };
+    }
+
+    case 'academic': {
+      const m = date.getMonth();
+      const y = date.getFullYear();
+      let ayStart = y;
+      let term = 'Fall';
+      let termWeek = 1;
+      if (m >= 8) {
+        ayStart = y;
+        term = 'Fall Semester';
+        const termStart = new Date(y, 8, 1);
+        termWeek = Math.max(1, Math.ceil((date.getTime() - termStart.getTime()) / (7 * 86400000)));
+      } else if (m <= 4) {
+        ayStart = y - 1;
+        term = 'Spring Semester';
+        const termStart = new Date(y, 0, 15);
+        termWeek = Math.max(1, Math.ceil((date.getTime() - termStart.getTime()) / (7 * 86400000)));
+      } else {
+        ayStart = y - 1;
+        term = 'Summer Session';
+        const termStart = new Date(y, 5, 1);
+        termWeek = Math.max(1, Math.ceil((date.getTime() - termStart.getTime()) / (7 * 86400000)));
+      }
+      return {
+        id: systemId,
+        name: meta.name,
+        group: meta.group,
+        formatted: `AY ${ayStart}–${(ayStart + 1) % 100} · ${term} W${termWeek}`,
+        shortLabel: `${term.split(' ')[0]} W${termWeek}`,
+        detail: `Academic Year ${ayStart}–${ayStart + 1} · Week ${termWeek}`,
+        wikiUrl: meta.wikiUrl,
+      };
+    }
+
+    case 'fiscal': {
+      const m = date.getMonth();
+      const y = date.getFullYear();
+      const fyStart = m >= 3 ? y : y - 1;
+      const fyEnd = (fyStart + 1) % 100;
+      const monthOffset = ((m - 3 + 12) % 12) + 1;
+      const quarter = Math.floor((monthOffset - 1) / 3) + 1;
+      return {
+        id: systemId,
+        name: meta.name,
+        group: meta.group,
+        formatted: `FY ${fyStart}–${fyEnd} · Q${quarter} (Month ${monthOffset})`,
+        shortLabel: `FY${fyEnd}/Q${quarter}`,
+        detail: `Fiscal Year ${fyStart}–${fyStart + 1} · Quarter ${quarter} (Apr–Mar standard)`,
+        wikiUrl: meta.wikiUrl,
+      };
+    }
   }
 }
 
@@ -1117,4 +1296,102 @@ export function getWorldCalendarsForDate(
   gujaratiScript = false
 ): WorldCalendarDateValue[] {
   return enabledIds.map((id) => convertToWorldCalendar(date, id, gujaratiScript));
+}
+
+/**
+ * Universal Date Converter between calendar systems (Phase 8)
+ * Converts from any input system into a Gregorian baseline, then into the target calendar system.
+ */
+export function convertCalendarDate(
+  fromSystem: WorldCalendarSystemId,
+  year: number,
+  month: number,
+  day: number,
+  targetSystem: WorldCalendarSystemId,
+  gujaratiScript = false
+): {
+  gregorianDate: Date;
+  result: WorldCalendarDateValue;
+  methodExplanation: string;
+  isApproximate: boolean;
+} {
+  let gDate: Date;
+  let methodExplanation = 'Astronomical algorithm conversion';
+  let isApproximate = false;
+
+  switch (fromSystem) {
+    case 'gregorian': {
+      gDate = new Date(year, month - 1, day);
+      methodExplanation = 'Standard Gregorian civil calendar (proleptic / ISO 8601)';
+      break;
+    }
+    case 'julian': {
+      const jdn = julianToJdn(year, month, day);
+      const g = jdnToGregorian(jdn);
+      gDate = new Date(g.year, g.month - 1, g.day);
+      methodExplanation = 'Julian Day Number interpolation (historical Julian calendar)';
+      break;
+    }
+    case 'islamic-hijri': {
+      const jdn = islamicToJdn(year, month, day);
+      const g = jdnToGregorian(jdn);
+      gDate = new Date(g.year, g.month - 1, g.day);
+      methodExplanation =
+        'Arithmetic tabular Islamic calendar. Official religious dates may vary by ±1 day due to local lunar crescent sightings.';
+      isApproximate = true;
+      break;
+    }
+    case 'solar-hijri': {
+      const jdn = persianToJdn(year, month, day);
+      const g = jdnToGregorian(jdn);
+      gDate = new Date(g.year, g.month - 1, g.day);
+      methodExplanation = 'Solar Hijri (Jalali 33-year leap cycle astronomical algorithm)';
+      break;
+    }
+    case 'indian-saka': {
+      const gYear = year + 78;
+      const leap = isGregorianLeap(gYear);
+      const chaitraStart = new Date(gYear, 2, leap ? 21 : 22);
+      const refYearLeap = isGregorianLeap(chaitraStart.getFullYear());
+      const monthLens = [refYearLeap ? 31 : 30, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 30];
+      let daysToAdd = 0;
+      for (let i = 0; i < month - 1; i++) {
+        daysToAdd += monthLens[i];
+      }
+      daysToAdd += day - 1;
+      gDate = new Date(chaitraStart.getTime() + daysToAdd * 86400000);
+      methodExplanation = 'Indian National Saka calendar standard epoch';
+      break;
+    }
+    case 'nepali-bs': {
+      const gYear = year - 57;
+      const start = new Date(gYear, 3, 14); // Baishakh 1 ~ April 14
+      const daysToAdd = (month - 1) * 30 + (day - 1);
+      gDate = new Date(start.getTime() + daysToAdd * 86400000);
+      methodExplanation = 'Nepali Bikram Sambat solar epoch (+57 year offset)';
+      isApproximate = true;
+      break;
+    }
+    case 'buddhist': {
+      const gYear = year - 543;
+      gDate = new Date(gYear, month - 1, day);
+      methodExplanation = 'Buddhist Era (Suriyakati Solar, BE 543 BCE epoch)';
+      break;
+    }
+    default: {
+      // Default to approximate Gregorian mapping for other systems
+      gDate = new Date(year, month - 1, day);
+      methodExplanation = 'Interpolated civil baseline conversion';
+      isApproximate = true;
+      break;
+    }
+  }
+
+  const result = convertToWorldCalendar(gDate, targetSystem, gujaratiScript);
+  return {
+    gregorianDate: gDate,
+    result,
+    methodExplanation,
+    isApproximate,
+  };
 }

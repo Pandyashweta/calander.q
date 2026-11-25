@@ -16,7 +16,7 @@ import {
 } from '../services/weatherService';
 import { getFestivalsForDate } from '../data/festivalsAndDays';
 import { getGujaratiPanchang } from '../data/gujaratiPanchang';
-import { convertToWorldCalendar } from '../data/worldCalendars';
+import { convertToWorldCalendar, getWorldCalendarsForDate } from '../data/worldCalendars';
 import {
   COLOR_THEMES,
   DAY_NAMES_SHORT,
@@ -40,6 +40,7 @@ interface TimeGridProps {
   visibleLayerIds: Set<string>;
   showGujaratiCalendar: boolean;
   headerSubCalendar: WorldCalendarSystemId | 'none';
+  enabledWorldCalendars?: WorldCalendarSystemId[];
   gujaratiScript: boolean;
   primaryTz: TimezoneOption;
   secondaryTz: TimezoneOption;
@@ -87,6 +88,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
   visibleLayerIds,
   showGujaratiCalendar,
   headerSubCalendar,
+  enabledWorldCalendars = [],
   gujaratiScript,
   primaryTz,
   secondaryTz,
@@ -159,6 +161,19 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
       convertToWorldCalendar(d, effectiveSubCal, gujaratiScript)
     );
   }, [visibleDays, effectiveSubCal, gujaratiScript]);
+
+  const multiCalsByDay = useMemo(() => {
+    // If enabledWorldCalendars is configured, use all active ones; otherwise fallback to effectiveSubCal if present
+    const activeList =
+      enabledWorldCalendars.length > 0
+        ? enabledWorldCalendars
+        : effectiveSubCal !== 'none'
+        ? [effectiveSubCal]
+        : [];
+    return visibleDays.map((d) =>
+      getWorldCalendarsForDate(d, activeList, gujaratiScript)
+    );
+  }, [visibleDays, enabledWorldCalendars, effectiveSubCal, gujaratiScript]);
 
   const { spanningAllDayEvents, perDayAllDayItems } = useMemo(() => {
     const firstKey = visibleDateKeys[0];
@@ -479,23 +494,62 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                         )}
                       </div>
 
-                      {subCalVal && (
-                        <button
-                          type="button"
-                          onClick={() => onSelectDayPanchang(day, panchang)}
-                          title={`${subCalVal.name}: ${subCalVal.formatted}`}
-                          className={`mt-0.5 max-w-full truncate px-1 sm:px-1.5 py-[1px] rounded text-[10px] sm:text-[10.5px] leading-tight transition-colors cursor-pointer ${
-                            effectiveSubCal === 'gujarati-vikram' && gujaratiScript
-                              ? 'font-gujarati'
-                              : ''
-                          } ${
-                            isHighlightedGujTithi
-                              ? 'text-[#9A5B00] bg-[#FEF5D9]/80 hover:bg-[#FCEBB8] font-medium'
-                              : 'text-[#8A7A5E] hover:bg-[#F5F2EB]'
-                          }`}
-                        >
-                          {subCalVal.shortLabel}
-                        </button>
+                      {/* Unified Multi-Calendar Secondary Date Badges */}
+                      {multiCalsByDay[idx] && multiCalsByDay[idx].length > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center justify-center gap-1 max-w-full px-0.5">
+                          {multiCalsByDay[idx].slice(0, 2).map((calVal) => {
+                            const isHighlighted =
+                              calVal.id === 'gujarati-vikram' &&
+                              (panchang.tithiNum === 15 || panchang.tithiNum === 11);
+
+                            const badgeStyle =
+                              calVal.id === 'gujarati-vikram'
+                                ? isHighlighted
+                                  ? 'text-[#9A5B00] bg-[#FEF5D9] hover:bg-[#FCEBB8] font-medium'
+                                  : 'text-[#8A6D2D] bg-[#FDF8EC] hover:bg-[#F9EFC7]'
+                                : calVal.id === 'islamic-hijri'
+                                ? 'text-[#1D6F42] bg-[#EAF7EE] hover:bg-[#D5EEDD]'
+                                : calVal.id === 'hebrew'
+                                ? 'text-[#1B5E8A] bg-[#E8F3FA] hover:bg-[#D2E7F5]'
+                                : calVal.id === 'chinese'
+                                ? 'text-[#A02828] bg-[#FCEAEA] hover:bg-[#F8D2D2]'
+                                : calVal.id === 'solar-hijri'
+                                ? 'text-[#B25900] bg-[#FFF2E2] hover:bg-[#FFE3C2]'
+                                : calVal.id === 'iso-week'
+                                ? 'text-[#4A4A4A] bg-[#F0F0F0] hover:bg-[#E4E4E4] font-mono-tabular'
+                                : calVal.id === 'academic'
+                                ? 'text-[#8C2A1C] bg-[#F8DFD6] hover:bg-[#F4CFC2]'
+                                : calVal.id === 'fiscal'
+                                ? 'text-[#525252] bg-[#EFEFEF] hover:bg-[#E2E2E2]'
+                                : 'text-[#5C5C5C] bg-[#F4F4F4] hover:bg-[#EAEAEA]';
+
+                            return (
+                              <button
+                                key={calVal.id}
+                                type="button"
+                                onClick={() => onSelectDayPanchang(day, panchang)}
+                                title={`${calVal.name}: ${calVal.formatted} · ${calVal.detail}`}
+                                className={`max-w-full truncate px-1.5 py-[1px] rounded text-[9.5px] sm:text-[10px] leading-tight transition-colors cursor-pointer ${
+                                  calVal.id === 'gujarati-vikram' && gujaratiScript
+                                    ? 'font-gujarati'
+                                    : ''
+                                } ${badgeStyle}`}
+                              >
+                                {calVal.shortLabel}
+                              </button>
+                            );
+                          })}
+                          {multiCalsByDay[idx].length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => onSelectDayPanchang(day, panchang)}
+                              title={multiCalsByDay[idx].map((c) => `${c.name}: ${c.formatted}`).join('\n')}
+                              className="text-[9px] text-[#737373] bg-[#EFEFEF] hover:bg-[#E0E0E0] px-1 py-[1px] rounded cursor-pointer shrink-0 transition-colors"
+                            >
+                              +{multiCalsByDay[idx].length - 2}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
