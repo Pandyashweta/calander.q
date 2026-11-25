@@ -1,0 +1,6 @@
+{
+  "name": "Samay Calendar",
+  "description": "Precision desktop calendar with dual timezones, Indian festivals, global special days, and Gujarati Vikram Samvat Panchang with instant layer toggles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

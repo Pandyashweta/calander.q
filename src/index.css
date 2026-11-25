@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --font-gujarati: 'Noto Sans Gujarati', 'Plus Jakarta Sans', sans-serif;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    background-color: #ffffff;
+    color: #1a1a1a;
+  }
+}
+
+.font-gujarati {
+  font-family: var(--font-gujarati);
+}
+
+.font-mono-tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle macOS-style scrollbars */
+.cal-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.cal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 9999px;
+}
+
+.cal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.24);
+}
