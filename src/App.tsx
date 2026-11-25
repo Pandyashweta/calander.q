@@ -3,20 +3,26 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Download,
   Eye,
   EyeOff,
+  HelpCircle,
   PanelLeft,
+  PanelRight,
   Search,
   SlidersHorizontal,
+  User,
 } from 'lucide-react';
 import {
   AvailabilitySlot,
+  CalendarColorKey,
   CalendarEvent,
   CalendarLayer,
   FestivalItem,
   GoogleUserProfile,
   PendingGoogleMutation,
   TimezoneOption,
+  UserAccount,
   ViewMode,
   WorldCalendarSystemId,
 } from './types/calendar';
@@ -44,7 +50,9 @@ import {
   addDays,
   formatDateKey,
   formatTimeRange,
+  getLocalDeviceTimezoneOption,
   getVisibleDays,
+  isSameDay,
   parseDateKey,
 } from './utils/dateUtils';
 import { LeftSidebar } from './components/LeftSidebar';
@@ -56,6 +64,11 @@ import { SettingsModal, SettingsTab } from './components/SettingsModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { WeatherWidget } from './components/WeatherWidget';
 import { useViewport } from './hooks/useViewport';
+import { ExportModal } from './components/ExportModal';
+import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
+import { AuthModal } from './components/AuthModal';
+import { LegalDocId, LegalModal } from './components/LegalModal';
+import { fetchCurrentAccount, getStoredUser } from './services/authClient';
 import {
   DailyForecastItem,
   ResolvedLocation,
@@ -67,9 +80,9 @@ import {
   reverseGeocodeCoords,
 } from './services/weatherService';
 
-const STORAGE_EVENTS_KEY = 'samay_calendar_events_v2';
-const STORAGE_LAYERS_KEY = 'samay_calendar_layers_v2';
-const STORAGE_PREFS_KEY = 'samay_calendar_prefs_v2';
+const STORAGE_EVENTS_KEY = 'calendar_q_events_v2';
+const STORAGE_LAYERS_KEY = 'calendar_q_layers_v2';
+const STORAGE_PREFS_KEY = 'calendar_q_prefs_v2';
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   day: 'Day',
@@ -80,18 +93,48 @@ const VIEW_LABELS: Record<ViewMode, string> = {
 };
 
 export default function App() {
-  const today = useMemo(() => {
+  const [today, setToday] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  }, []);
+  });
 
   const viewport = useViewport();
   const prevWidthRef = useRef<number>(viewport.width);
 
-  const [anchorDate, setAnchorDate] = useState<Date>(() => today);
+  const [anchorDate, setAnchorDate] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  });
   const [viewMode, setViewMode] = useState<ViewMode>('5days');
   const [mobileViewOverride, setMobileViewOverride] = useState<ViewMode | null>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+
+  // Automatic midnight detection & daylight saving update
+  useEffect(() => {
+    const checkMidnight = () => {
+      const now = new Date();
+      const cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      setToday((prev) => {
+        if (prev.getTime() !== cur.getTime()) {
+          setAnchorDate((prevAnchor) => (isSameDay(prevAnchor, prev) ? cur : prevAnchor));
+          return cur;
+        }
+        return prev;
+      });
+    };
+
+    const timer = setInterval(checkMidnight, 10000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') checkMidnight();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', checkMidnight);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', checkMidnight);
+    };
+  }, []);
 
   const [leftOpen, setLeftOpen] = useState<boolean>(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1024 : true
@@ -103,12 +146,22 @@ export default function App() {
 
   const [layers, setLayers] = useState<CalendarLayer[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_LAYERS_KEY);
+      const saved =
+        localStorage.getItem(STORAGE_LAYERS_KEY) ||
+        localStorage.getItem('calander_q_layers_v2') ||
+        localStorage.getItem('samay_calendar_layers_v2');
       if (saved) {
-        const parsed = JSON.parse(saved) as Record<string, boolean>;
-        return INITIAL_LAYERS.map((l) =>
-          typeof parsed[l.id] === 'boolean' ? { ...l, visible: parsed[l.id] } : l
-        );
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const savedIds = new Set(parsed.map((l: CalendarLayer) => l.id));
+          const missingInitial = INITIAL_LAYERS.filter((l) => !savedIds.has(l.id));
+          return [...parsed, ...missingInitial];
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          const map = parsed as Record<string, boolean>;
+          return INITIAL_LAYERS.map((l) =>
+            typeof map[l.id] === 'boolean' ? { ...l, visible: map[l.id] } : l
+          );
+        }
       }
     } catch {
       // ignore
@@ -119,7 +172,10 @@ export default function App() {
   // Local events (starts cleanly empty — zero fake sample events!)
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_EVENTS_KEY);
+      const saved =
+        localStorage.getItem(STORAGE_EVENTS_KEY) ||
+        localStorage.getItem('calander_q_events_v2') ||
+        localStorage.getItem('samay_calendar_events_v2');
       if (saved) {
         const parsed = JSON.parse(saved) as CalendarEvent[];
         if (Array.isArray(parsed)) return parsed;
@@ -139,6 +195,18 @@ export default function App() {
     useState<PendingGoogleMutation | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
 
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
+      if (saved && JSON.parse(saved).selectedLanguage) {
+        return JSON.parse(saved).selectedLanguage;
+      }
+    } catch {
+      // ignore
+    }
+    return 'en';
+  });
+
   const [gujaratiScript, setGujaratiScript] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
@@ -156,12 +224,16 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
       if (saved) {
         const arr = JSON.parse(saved).enabledWorldCalendars;
-        if (Array.isArray(arr)) return arr;
+        // Only restore saved selection if the user explicitly chose ≤ 3 calendars.
+        // If more than 3 are stored it means the old default-all behaviour populated
+        // them — reset to empty so the UI starts clean.
+        if (Array.isArray(arr) && arr.length <= 3) return arr;
+        if (Array.isArray(arr) && arr.length > 3) return [];
       }
     } catch {
       // ignore
     }
-    return DEFAULT_ENABLED_WORLD_CALENDARS;
+    return DEFAULT_ENABLED_WORLD_CALENDARS; // now [] since all defaultEnabled: false
   });
 
   const [headerSubCalendar, setHeaderSubCalendar] = useState<
@@ -189,7 +261,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return TIMEZONE_OPTIONS[0]; // IST
+    return getLocalDeviceTimezoneOption();
   });
 
   const [secondaryTz, setSecondaryTz] = useState<TimezoneOption>(() => {
@@ -252,6 +324,19 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('festivals');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalInitialDoc, setLegalInitialDoc] = useState<LegalDocId>('privacy');
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => getStoredUser());
+
+  useEffect(() => {
+    fetchCurrentAccount().then((user) => {
+      if (user) setCurrentUser(user);
+    });
+  }, []);
+
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const meetInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -262,6 +347,19 @@ export default function App() {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToastMsg(null), 2400);
   }, []);
+
+  const handleImportEvents = useCallback((imported: CalendarEvent[]) => {
+    setLocalEvents((prev) => [...prev, ...imported]);
+    showToast(`Successfully imported ${imported.length} events`);
+  }, [showToast]);
+
+  const handleSelectLanguage = useCallback((code: string) => {
+    setSelectedLanguage(code);
+    if (code === 'gu') {
+      setGujaratiScript(true);
+    }
+    showToast(`Language set to ${code.toUpperCase()}`);
+  }, [showToast]);
 
   const openSettings = useCallback((tab: SettingsTab = 'festivals') => {
     setSettingsTab(tab);
@@ -285,11 +383,8 @@ export default function App() {
 
   useEffect(() => {
     try {
-      const map: Record<string, boolean> = {};
-      for (const l of layers) {
-        if (l.type !== 'google') map[l.id] = l.visible;
-      }
-      localStorage.setItem(STORAGE_LAYERS_KEY, JSON.stringify(map));
+      const nonGoogle = layers.filter((l) => l.type !== 'google');
+      localStorage.setItem(STORAGE_LAYERS_KEY, JSON.stringify(nonGoogle));
     } catch {
       // ignore
     }
@@ -300,6 +395,7 @@ export default function App() {
       localStorage.setItem(
         STORAGE_PREFS_KEY,
         JSON.stringify({
+          selectedLanguage,
           gujaratiScript,
           enabledWorldCalendars,
           headerSubCalendar,
@@ -313,6 +409,7 @@ export default function App() {
       // ignore
     }
   }, [
+    selectedLanguage,
     gujaratiScript,
     enabledWorldCalendars,
     headerSubCalendar,
@@ -691,6 +788,25 @@ export default function App() {
     );
   }, []);
 
+  const handleAddCustomCalendar = useCallback(
+    (name: string, color: CalendarColorKey) => {
+      const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+      const newLayer: CalendarLayer = {
+        id,
+        name,
+        groupId: 'local-calendars',
+        color,
+        visible: true,
+        type: 'custom',
+        icon: 'calendar',
+      };
+      setLayers((prev) => [...prev, newLayer]);
+      setActiveCalendarId(id);
+      showToast(`Created calendar "${name}"`);
+    },
+    [showToast]
+  );
+
   // Local event creation (or draft creation targeting Google Calendar — requires confirmation when saving to Google!)
   const handleCreateEventFromRange = useCallback(
     (dateKey: string, startMinutes: number, endMinutes: number, customTitle?: string) => {
@@ -940,6 +1056,12 @@ export default function App() {
         return;
       }
 
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        setExportModalOpen((prev) => !prev);
+        return;
+      }
+
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setActiveModal(null);
@@ -947,7 +1069,23 @@ export default function App() {
         return;
       }
 
-      if (isInput || activeModal || settingsOpen || pendingMutation) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setShortcutsModalOpen((prev) => !prev);
+        return;
+      }
+
+      if (
+        isInput ||
+        activeModal ||
+        settingsOpen ||
+        pendingMutation ||
+        exportModalOpen ||
+        shortcutsModalOpen ||
+        authModalOpen ||
+        legalModalOpen
+      )
+        return;
 
       const key = e.key.toLowerCase();
       if (key === 't') {
@@ -1013,6 +1151,10 @@ export default function App() {
     activeModal,
     settingsOpen,
     pendingMutation,
+    exportModalOpen,
+    shortcutsModalOpen,
+    authModalOpen,
+    legalModalOpen,
     handleToday,
     openSettings,
     handleToggleAllCultural,
@@ -1076,6 +1218,9 @@ export default function App() {
             activeCalendarId={activeCalendarId}
             gujaratiScript={gujaratiScript}
             enabledWorldCount={enabledWorldCalendars.length}
+            enabledWorldCalendars={enabledWorldCalendars}
+            onToggleWorldCalendar={handleToggleWorldCalendar}
+            onAddCustomCalendar={handleAddCustomCalendar}
             googleUser={googleUser}
             googleSyncing={googleSyncing}
             isDrawer={viewport.isDrawerMode}
@@ -1100,29 +1245,62 @@ export default function App() {
 
         <main className="flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden">
           {/* Top Bar (Exact Cron / Notion Calendar proportions, gracefully compact on mobile) */}
-          <header className="h-[52px] sm:h-[54px] px-2.5 sm:px-5 flex items-center justify-between gap-2 sm:gap-4 shrink-0 bg-white">
-            <div className="flex items-baseline gap-2 sm:gap-3 min-w-0">
+          <header className="h-[52px] sm:h-[54px] px-3 sm:px-5 flex items-center justify-between gap-3 shrink-0 bg-white border-b border-[#EFEFEF]">
+            {/* Left: Navigation & Calendar Title */}
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {(!leftOpen || viewport.isDrawerMode) && (
                 <button
                   type="button"
                   onClick={openLeftDrawer}
                   title="Open sidebar ([)"
                   aria-label="Open sidebar"
-                  className="p-1.5 -ml-0.5 rounded-md text-[#787878] hover:text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors self-center cursor-pointer shrink-0"
+                  className="p-1.5 -ml-0.5 rounded-md text-[#787878] hover:text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer shrink-0"
                 >
                   <PanelLeft className="w-4 h-4" />
                 </button>
               )}
-              <h1 className="text-[18px] sm:text-[24px] font-bold tracking-[-0.025em] text-[#1A1A1A] leading-none whitespace-nowrap truncate">
+
+              {/* Today Button */}
+              <button
+                type="button"
+                onClick={handleToday}
+                className="h-[30px] px-2.5 sm:px-3 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+              >
+                Today
+              </button>
+
+              {/* Prev / Next Chevrons */}
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={handlePrev}
+                  aria-label="Previous period"
+                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNext}
+                  aria-label="Next period"
+                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Title */}
+              <h1 className="text-[18px] sm:text-[22px] font-bold tracking-[-0.025em] text-[#1A1A1A] leading-none whitespace-nowrap truncate ml-1 sm:ml-2">
                 {headerInfo.title}
               </h1>
 
+              {/* Secondary Calendar Subcaption */}
               {headerInfo.subCaption && (
                 <button
                   type="button"
                   onClick={() => openSettings('world')}
                   title="Configure secondary calendar display"
-                  className={`text-[12.5px] font-medium text-[#8C7A5B] hover:text-[#1A1A1A] truncate hidden lg:inline cursor-pointer transition-colors ${
+                  className={`text-[12px] font-medium text-[#8C7A5B] hover:text-[#1A1A1A] truncate hidden lg:inline cursor-pointer transition-colors ${
                     headerSubCalendar === 'gujarati-vikram' && gujaratiScript
                       ? 'font-gujarati'
                       : ''
@@ -1133,111 +1311,14 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              {/* Live Weather Forecast Widget (Google Maps Weather API) */}
-              <WeatherWidget
-                weather={weatherData}
-                loading={weatherLoading}
-                error={weatherError}
-                units={weatherUnits}
-                locationQuery={weatherLocationQuery}
-                today={today}
-                onChangeUnits={setWeatherUnits}
-                onSearchCity={handleSetWeatherCity}
-                onUseGeolocation={handleUseWeatherGeolocation}
-                onRefresh={() => void loadWeather(true)}
-                onJumpToDate={(d) => setAnchorDate(d)}
-              />
-
-              {/* Master Festivals & Panchang Toggle */}
-              <button
-                type="button"
-                onClick={handleToggleAllCultural}
-                title={
-                  anyCulturalVisible
-                    ? 'Hide all festivals, holidays & Gujarati calendar (H)'
-                    : 'Show all festivals, holidays & Gujarati calendar (H)'
-                }
-                className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium hidden sm:inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  anyCulturalVisible
-                    ? 'bg-white border-[#E4E4E4] text-[#4A4A4A] hover:bg-[#F5F5F5]'
-                    : 'bg-[#F5F5F5] border-[#E4E4E4] text-[#8C8C8C] hover:text-[#1A1A1A]'
-                }`}
-              >
-                {anyCulturalVisible ? (
-                  <>
-                    <Eye className="w-3.5 h-3.5 text-[#D98E04]" />
-                    <span className="hidden xl:inline">Festivals</span>
-                  </>
-                ) : (
-                  <>
-                    <EyeOff className="w-3.5 h-3.5" />
-                    <span className="hidden xl:inline">Hidden</span>
-                  </>
-                )}
-              </button>
-
-              {/* Settings Menu Button */}
-              <button
-                type="button"
-                onClick={() => openSettings('festivals')}
-                title="Settings, World Calendars & Google Calendar (,)"
-                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#3F3F3F] hidden md:inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-[#6B6B6B]" />
-                <span className="hidden xl:inline">Settings</span>
-              </button>
-
-              {/* Account Avatar Button */}
-              <button
-                type="button"
-                onClick={() => openSettings('google')}
-                title={
-                  googleUser
-                    ? `Connected: ${googleUser.email}`
-                    : 'Connect Google Calendar'
-                }
-                aria-label="Google Calendar account settings"
-                className="w-[30px] h-[30px] rounded-full border border-[#E5E5E5] bg-[#F7F7F7] hover:bg-[#EFEFEF] hidden sm:flex items-center justify-center transition-colors shrink-0 cursor-pointer overflow-hidden"
-              >
-                {googleUser?.photoURL ? (
-                  <img
-                    src={googleUser.photoURL}
-                    alt={googleUser.displayName || 'Google user'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <svg
-                    viewBox="0 0 32 32"
-                    className="w-6 h-6"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <circle cx="16" cy="13" r="6" fill="#1F1F1F" />
-                    <circle cx="16" cy="13.5" r="4.1" fill="#FFFFFF" />
-                    <circle cx="14.6" cy="13.2" r="0.7" fill="#1F1F1F" />
-                    <circle cx="17.4" cy="13.2" r="0.7" fill="#1F1F1F" />
-                    <path
-                      d="M14.7 15.1C15.4 15.7 16.6 15.7 17.3 15.1"
-                      stroke="#1F1F1F"
-                      strokeWidth="0.9"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M8.5 27C9.6 22.3 12.5 20 16 20C19.5 20 22.4 22.3 23.5 27"
-                      fill="#1F1F1F"
-                    />
-                  </svg>
-                )}
-              </button>
-
+            {/* Right: View Switcher & Side Panel Toggle */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* View Switcher Dropdown ("5 days ▾" — shows adapted view on mobile) */}
               <div ref={viewMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setViewMenuOpen((v) => !v)}
-                  className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] inline-flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] inline-flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
                 >
                   <span>{VIEW_LABELS[effectiveViewMode]}</span>
                   <ChevronDown className="w-3.5 h-3.5 text-[#7A7A7A]" />
@@ -1274,47 +1355,21 @@ export default function App() {
                 )}
               </div>
 
-              {/* Today Button */}
+              {/* Side Panel Toggle */}
               <button
                 type="button"
-                onClick={handleToday}
-                className="h-[30px] px-2 sm:px-3 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                onClick={() => setRightOpen((v) => !v)}
+                title={rightOpen ? 'Hide side panel (])' : 'Show side panel (])'}
+                aria-label="Toggle side panel"
+                className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs ${
+                  rightOpen
+                    ? 'bg-[#F2F4F7] border-[#D1D5DB] text-[#111827]'
+                    : 'bg-white border-[#E4E4E4] text-[#4B5563] hover:bg-[#F5F5F5] hover:text-[#111827]'
+                }`}
               >
-                Today
+                <PanelRight className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{rightOpen ? 'Panel' : 'Open Panel'}</span>
               </button>
-
-              {/* Prev / Next Chevrons */}
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={handlePrev}
-                  aria-label="Previous period"
-                  className="w-[26px] sm:w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  aria-label="Next period"
-                  className="w-[26px] sm:w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Search / Inspector Drawer Toggle on Tablet & Mobile */}
-              {viewport.isDrawerMode && (
-                <button
-                  type="button"
-                  onClick={openRightDrawer}
-                  title="Search & Inspector (])"
-                  aria-label="Open search and inspector panel"
-                  className="w-[28px] h-[28px] rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F2F2F2] text-[#525252] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
           </header>
 
@@ -1328,6 +1383,7 @@ export default function App() {
               visibleLayerIds={visibleLayerIds}
               showGujaratiCalendar={showGujaratiCalendar}
               headerSubCalendar={headerSubCalendar}
+              enabledWorldCalendars={enabledWorldCalendars}
               gujaratiScript={gujaratiScript}
               selectedEventId={selection.kind === 'event' ? selection.eventId : null}
               selectedFestivalId={
@@ -1363,6 +1419,7 @@ export default function App() {
               visibleLayerIds={visibleLayerIds}
               showGujaratiCalendar={showGujaratiCalendar}
               headerSubCalendar={headerSubCalendar}
+              enabledWorldCalendars={enabledWorldCalendars}
               gujaratiScript={gujaratiScript}
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
@@ -1409,6 +1466,7 @@ export default function App() {
             gujaratiScript={gujaratiScript}
             enabledWorldCalendars={enabledWorldCalendars}
             primaryTz={primaryTz}
+            secondaryTz={secondaryTz}
             googleUser={googleUser}
             selection={selection}
             shareMode={shareMode}
@@ -1449,6 +1507,18 @@ export default function App() {
             }}
             onToggleAllCultural={handleToggleAllCultural}
             onToggleGujaratiLayer={() => handleToggleLayer('gujarati-calendar')}
+            currentUser={currentUser}
+            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenExport={() => setExportModalOpen(true)}
+            weatherData={weatherData}
+            weatherLoading={weatherLoading}
+            weatherError={weatherError}
+            weatherUnits={weatherUnits}
+            weatherLocationQuery={weatherLocationQuery}
+            onChangeWeatherUnits={setWeatherUnits}
+            onSearchWeatherCity={handleSetWeatherCity}
+            onUseWeatherGeolocation={handleUseWeatherGeolocation}
+            onRefreshWeather={() => void loadWeather(true)}
           />
         )}
       </div>
@@ -1485,6 +1555,8 @@ export default function App() {
         gujaratiScript={gujaratiScript}
         enabledWorldCalendars={enabledWorldCalendars}
         headerSubCalendar={headerSubCalendar}
+        selectedLanguage={selectedLanguage}
+        onSelectLanguage={handleSelectLanguage}
         primaryTz={primaryTz}
         secondaryTz={secondaryTz}
         googleUser={googleUser}
@@ -1508,6 +1580,93 @@ export default function App() {
         onGoogleSync={() => void syncGoogleCalendarData()}
         onGoogleLogout={handleGoogleLogout}
       />
+
+      {/* Export / Import Modal (.ics) */}
+      <ExportModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        events={allEvents}
+        layers={layers}
+        anchorDate={anchorDate}
+        visibleDays={visibleDays}
+        visibleLayerIds={visibleLayerIds}
+        viewMode={effectiveViewMode}
+        timezone={primaryTz.id}
+        onImportEvents={handleImportEvents}
+      />
+
+      {/* Searchable Keyboard Shortcuts Modal */}
+      <ShortcutsHelpModal
+        open={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Authentication & Profile Modal */}
+      <AuthModal
+        open={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        currentUser={currentUser}
+        onUserChange={setCurrentUser}
+        showToast={showToast}
+      />
+
+      {/* Legal & Compliance Modal */}
+      <LegalModal
+        open={legalModalOpen}
+        onClose={() => setLegalModalOpen(false)}
+        initialDoc={legalInitialDoc}
+      />
+
+      {/* Footer Copyright Banner & Legal Navigation */}
+      <footer className="h-[26px] px-3 bg-[#FAFAFA] border-t border-[#EFEFEF] flex items-center justify-between text-[11px] text-[#8C8C8C] shrink-0 select-none">
+        <div className="flex items-center gap-2">
+          <span>© 2026 calendar.q. All rights reserved.</span>
+          <span className="hidden md:inline text-[#D4D4D4]">·</span>
+          <span className="hidden md:inline text-[#A0A0A0]">Unified Multi-Calendar Platform</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialDoc('privacy');
+              setLegalModalOpen(true);
+            }}
+            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+          >
+            Privacy
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialDoc('terms');
+              setLegalModalOpen(true);
+            }}
+            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+          >
+            Terms
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialDoc('data-deletion');
+              setLegalModalOpen(true);
+            }}
+            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+          >
+            Data Deletion
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalInitialDoc('licenses');
+              setLegalModalOpen(true);
+            }}
+            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+          >
+            Licenses
+          </button>
+        </div>
+      </footer>
 
       {/* Mandatory Explicit Confirmation Dialog for Google Calendar Mutations */}
       <ConfirmDialog

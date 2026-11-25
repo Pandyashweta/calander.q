@@ -111,6 +111,50 @@ const NAKSHATRA_GU = [
   'શતભિષા', 'પૂર્વા ભાદ્રપદા', 'ઉત્તરા ભાદ્રપદા', 'રેવતી',
 ];
 
+export const YOGA_EN = [
+  'Vishkambha', 'Priti', 'Ayushman', 'Saubhagya', 'Shobhana', 'Atiganda',
+  'Sukarma', 'Dhriti', 'Shula', 'Ganda', 'Vriddhi', 'Dhruva',
+  'Vyaghata', 'Harshana', 'Vajra', 'Siddhi', 'Vyatipata', 'Variyan',
+  'Parigha', 'Shiva', 'Siddha', 'Sadhya', 'Shubha', 'Shukla',
+  'Brahma', 'Indra', 'Vaidhriti',
+];
+
+export const KARANA_EN = [
+  'Bava', 'Balava', 'Kaulava', 'Taitila', 'Gara', 'Vanija', 'Vishti (Bhadra)',
+  'Shakuni', 'Chatushpada', 'Naga', 'Kintughna',
+];
+
+export const RITU_EN = [
+  'Vasanta (Spring)',
+  'Grishma (Summer)',
+  'Varsha (Monsoon)',
+  'Sharad (Autumn)',
+  'Hemanta (Pre-winter)',
+  'Shishira (Winter)',
+];
+
+export const SAMVATSARA_EN = [
+  'Prabhava', 'Vibhava', 'Shukla', 'Pramoda', 'Prajapati', 'Angirasa', 'Shrimukha',
+  'Bhava', 'Yuva', 'Dhatri', 'Ishvara', 'Bahudhanya', 'Pramathi', 'Vikrama', 'Vrishaprajapati',
+  'Chitrabhanu', 'Subhanu', 'Tarana', 'Parthiva', 'Vyaya', 'Sarvajit', 'Sarvadhari',
+  'Virodhi', 'Vikrita', 'Khara', 'Nandana', 'Vijaya', 'Jaya', 'Manmatha', 'Durmukha',
+  'Hemalamba', 'Vilamba', 'Vikari', 'Sharvari', 'Plava', 'Shubhakrita', 'Shobhakrita',
+  'Krodhi', 'Vishvavasu', 'Parabhava', 'Plavanga', 'Kilaka', 'Saumya', 'Sadharana',
+  'Virodhikrita', 'Paridhavi', 'Pramadicha', 'Ananda', 'Rakshasa', 'Anala', 'Pingala',
+  'Kalayukta', 'Siddharthi', 'Raudra', 'Durmati', 'Dundubhi', 'Rudhirodgari', 'Raktaksha',
+  'Krodhana', 'Akshaya',
+];
+
+export const RAHU_KAAL_BY_DOW = [
+  '16:30 – 18:00', // Sun
+  '07:30 – 09:00', // Mon
+  '15:00 – 16:30', // Tue
+  '12:00 – 13:30', // Wed
+  '13:30 – 15:00', // Thu
+  '10:30 – 12:00', // Fri
+  '09:00 – 10:30', // Sat
+];
+
 export function toGujaratiDigits(num: number): string {
   return String(num)
     .split('')
@@ -287,6 +331,42 @@ export function getGujaratiPanchang(date: Date): GujaratiPanchang {
   const moonSid = mod360(mLon - ayan);
   const nakIdx = Math.floor(moonSid / (360 / 27)) % 27;
 
+  // Shaka Year (Civil Indian national epoch)
+  const shakaYear = vikramSamvat - 135;
+
+  // Yoga: Sidereal Sun + Sidereal Moon / (360 / 27)
+  const sunSid = mod360(sLon - ayan);
+  const yogaIdx = Math.floor(mod360(sunSid + moonSid) / (360 / 27)) % 27;
+  const yogaEn = YOGA_EN[yogaIdx];
+
+  // Karana: half-tithi (6 degrees of elongation)
+  const halfTithi = Math.floor(elongation / 6) % 60;
+  let karanaEn = '';
+  if (halfTithi === 0) {
+    karanaEn = 'Kintughna';
+  } else if (halfTithi >= 57) {
+    karanaEn = KARANA_EN[7 + (halfTithi - 57)] || 'Naga';
+  } else {
+    karanaEn = KARANA_EN[(halfTithi - 1) % 7];
+  }
+
+  // Ritu (season based on lunar month index 0..11)
+  const rituIdx = Math.floor(monthIdx / 2) % 6;
+  const rituEn = RITU_EN[rituIdx];
+
+  // Samvatsara (60-year Jovian cycle)
+  const samvatsaraIdx = ((year - 1987) % 60 + 60) % 60;
+  const samvatsaraEn = SAMVATSARA_EN[samvatsaraIdx];
+
+  // Day of week
+  const dow = date.getDay();
+  const vaarEn = VAAR_EN[dow];
+  const vaarGu = VAAR_GU[dow];
+
+  // Rahu Kaal & Abhijit Muhurat
+  const rahuKaal = RAHU_KAAL_BY_DOW[dow];
+  const abhijitMuhurat = dow === 3 ? 'None (Avoided on Wed)' : '11:45 AM – 12:35 PM';
+
   // Moon Illumination %
   const moonIllumination = Math.round(((1 - Math.cos(elongation * DEG2RAD)) / 2) * 100);
   let moonPhaseLabel = 'Waxing';
@@ -296,10 +376,6 @@ export function getGujaratiPanchang(date: Date): GujaratiPanchang {
   else if (tithiIndex0 < 14) moonPhaseLabel = 'Waxing Gibbous';
   else if (tithiIndex0 < 22) moonPhaseLabel = 'Waning Gibbous';
   else moonPhaseLabel = 'Waning Crescent';
-
-  const dow = date.getDay();
-  const vaarEn = VAAR_EN[dow];
-  const vaarGu = VAAR_GU[dow];
 
   // Special recurring Gujarati Tithi observances
   let specialTithi: GujaratiPanchang['specialTithi'] = undefined;
@@ -359,6 +435,7 @@ export function getGujaratiPanchang(date: Date): GujaratiPanchang {
   const result: GujaratiPanchang = {
     dateKey: key,
     vikramSamvat,
+    shakaYear,
     monthEn: `${adhikPrefixEn}${monthEn}`,
     monthGu: `${adhikPrefixGu}${monthGu}`,
     isAdhik,
@@ -371,6 +448,12 @@ export function getGujaratiPanchang(date: Date): GujaratiPanchang {
     vaarGu,
     nakshatraEn: NAKSHATRA_EN[nakIdx],
     nakshatraGu: NAKSHATRA_GU[nakIdx],
+    yogaEn,
+    karanaEn,
+    rituEn,
+    samvatsaraEn,
+    rahuKaal,
+    abhijitMuhurat,
     moonIllumination,
     moonPhaseLabel,
     specialTithi,

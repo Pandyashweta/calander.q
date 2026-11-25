@@ -137,15 +137,63 @@ export const COLOR_THEMES: Record<
 
 export const TIMEZONE_OPTIONS: TimezoneOption[] = [
   { id: 'IST', abbr: 'IST', label: 'India Standard Time (UTC+5:30)', offsetMinutes: 330 },
-  { id: 'EST', abbr: 'EST', label: 'Eastern Standard Time (UTC-5)', offsetMinutes: -300 },
-  { id: 'PST', abbr: 'PST', label: 'Pacific Standard Time (UTC-8)', offsetMinutes: -480 },
+  { id: 'UTC', abbr: 'UTC', label: 'Coordinated Universal Time (UTC+0)', offsetMinutes: 0 },
   { id: 'GMT', abbr: 'GMT', label: 'Greenwich Mean Time (UTC+0)', offsetMinutes: 0 },
+  { id: 'BST_UK', abbr: 'BST', label: 'British Summer Time (UTC+1)', offsetMinutes: 60 },
   { id: 'CET', abbr: 'CET', label: 'Central European Time (UTC+1)', offsetMinutes: 60 },
+  { id: 'EET', abbr: 'EET', label: 'Eastern European Time (UTC+2)', offsetMinutes: 120 },
+  { id: 'MSK', abbr: 'MSK', label: 'Moscow Standard Time (UTC+3)', offsetMinutes: 180 },
   { id: 'GST', abbr: 'GST', label: 'Gulf Standard Time (UTC+4)', offsetMinutes: 240 },
-  { id: 'SGT', abbr: 'SGT', label: 'Singapore Time (UTC+8)', offsetMinutes: 480 },
-  { id: 'JST', abbr: 'JST', label: 'Japan Standard Time (UTC+9)', offsetMinutes: 540 },
-  { id: 'AEDT', abbr: 'AEDT', label: 'Australian Eastern Time (UTC+11)', offsetMinutes: 660 },
+  { id: 'PKT', abbr: 'PKT', label: 'Pakistan Standard Time (UTC+5)', offsetMinutes: 300 },
+  { id: 'BST_BD', abbr: 'BST', label: 'Bangladesh Standard Time (UTC+6)', offsetMinutes: 360 },
+  { id: 'ICT', abbr: 'ICT', label: 'Indochina Time (UTC+7)', offsetMinutes: 420 },
+  { id: 'SGT', abbr: 'SGT', label: 'Singapore / China Standard Time (UTC+8)', offsetMinutes: 480 },
+  { id: 'JST', abbr: 'JST', label: 'Japan / Korea Standard Time (UTC+9)', offsetMinutes: 540 },
+  { id: 'ACST', abbr: 'ACST', label: 'Australian Central Standard Time (UTC+9:30)', offsetMinutes: 570 },
+  { id: 'AEST', abbr: 'AEST', label: 'Australian Eastern Standard Time (UTC+10)', offsetMinutes: 600 },
+  { id: 'AEDT', abbr: 'AEDT', label: 'Australian Eastern Daylight Time (UTC+11)', offsetMinutes: 660 },
+  { id: 'NZST', abbr: 'NZST', label: 'New Zealand Standard Time (UTC+12)', offsetMinutes: 720 },
+  { id: 'HST', abbr: 'HST', label: 'Hawaii Standard Time (UTC-10)', offsetMinutes: -600 },
+  { id: 'AKST', abbr: 'AKST', label: 'Alaska Standard Time (UTC-9)', offsetMinutes: -540 },
+  { id: 'PST', abbr: 'PST', label: 'Pacific Standard Time (UTC-8)', offsetMinutes: -480 },
+  { id: 'MST', abbr: 'MST', label: 'Mountain Standard Time (UTC-7)', offsetMinutes: -420 },
+  { id: 'CST', abbr: 'CST', label: 'Central Standard Time (UTC-6)', offsetMinutes: -360 },
+  { id: 'EST', abbr: 'EST', label: 'Eastern Standard Time (UTC-5)', offsetMinutes: -300 },
+  { id: 'AST', abbr: 'AST', label: 'Atlantic Standard Time (UTC-4)', offsetMinutes: -240 },
+  { id: 'BRT', abbr: 'BRT', label: 'Brasília Time (UTC-3)', offsetMinutes: -180 },
 ];
+
+/**
+ * Returns the detected local device timezone with real-time DST offset.
+ */
+export function getLocalDeviceTimezoneOption(): TimezoneOption {
+  if (typeof window === 'undefined') return TIMEZONE_OPTIONS[0];
+  try {
+    const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local';
+    const now = new Date();
+    const offsetMinutes = -now.getTimezoneOffset();
+    const shortFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZoneName: 'short',
+      timeZone: tzName,
+    });
+    const parts = shortFormatter.formatToParts(now);
+    const tzPart = parts.find((p) => p.type === 'timeZoneName');
+    const abbr = tzPart ? tzPart.value : tzName.split('/').pop()?.slice(0, 4) || 'LOC';
+    const sign = offsetMinutes >= 0 ? '+' : '-';
+    const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const mins = Math.abs(offsetMinutes) % 60;
+    const offsetStr = `UTC${sign}${hours}${mins ? `:${String(mins).padStart(2, '0')}` : ''}`;
+    const cleanName = tzName.replace(/_/g, ' ');
+    return {
+      id: tzName,
+      abbr,
+      label: `Local (${cleanName}, ${offsetStr})`,
+      offsetMinutes,
+    };
+  } catch {
+    return TIMEZONE_OPTIONS[0];
+  }
+}
 
 export const MONTH_NAMES = [
   'January',

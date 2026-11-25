@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   Calendar,
+  Check,
   CloudSun,
   ExternalLink,
   Globe,
+  Languages,
   LocateFixed,
   LogOut,
   RefreshCw,
@@ -26,7 +28,39 @@ import {
 } from '../data/worldCalendars';
 import { COLOR_THEMES, MONTH_NAMES, TIMEZONE_OPTIONS } from '../utils/dateUtils';
 
-export type SettingsTab = 'festivals' | 'world' | 'google' | 'display';
+export type SettingsTab = 'festivals' | 'world' | 'language' | 'google' | 'display';
+
+export interface LanguageOption {
+  code: string;
+  name: string;
+  nativeName: string;
+  flag: string;
+  region: string;
+}
+
+export const SUPPORTED_LANGUAGES: LanguageOption[] = [
+  { code: 'en', name: 'English', nativeName: 'English', flag: 'US', region: 'Global / International' },
+  { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી', flag: 'IN', region: 'Gujarat, India' },
+  { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी', flag: 'IN', region: 'India' },
+  { code: 'sa', name: 'Sanskrit', nativeName: 'संस्कृतम्', flag: 'IN', region: 'Classical India' },
+  { code: 'es', name: 'Spanish', nativeName: 'Español', flag: 'ES', region: 'Spain & Latin America' },
+  { code: 'fr', name: 'French', nativeName: 'Français', flag: 'FR', region: 'France & Francophonie' },
+  { code: 'de', name: 'German', nativeName: 'Deutsch', flag: 'DE', region: 'Germany & Central Europe' },
+  { code: 'ar', name: 'Arabic', nativeName: 'العربية', flag: 'SA', region: 'Middle East & North Africa' },
+  { code: 'zh', name: 'Chinese', nativeName: '中文 (简体)', flag: 'CN', region: 'East Asia' },
+  { code: 'ja', name: 'Japanese', nativeName: '日本語', flag: 'JP', region: 'Japan' },
+  { code: 'ru', name: 'Russian', nativeName: 'Русский', flag: 'RU', region: 'Eastern Europe' },
+  { code: 'pt', name: 'Portuguese', nativeName: 'Português', flag: 'BR', region: 'Brazil & Portugal' },
+  { code: 'it', name: 'Italian', nativeName: 'Italiano', flag: 'IT', region: 'Italy' },
+  { code: 'ko', name: 'Korean', nativeName: '한국어', flag: 'KR', region: 'South Korea' },
+  { code: 'bn', name: 'Bengali', nativeName: 'বাংলা', flag: 'IN', region: 'West Bengal & Bangladesh' },
+  { code: 'mr', name: 'Marathi', nativeName: 'मराठी', flag: 'IN', region: 'Maharashtra, India' },
+  { code: 'ta', name: 'Tamil', nativeName: 'தமிழ்', flag: 'IN', region: 'Tamil Nadu & Sri Lanka' },
+  { code: 'te', name: 'Telugu', nativeName: 'తెలుగు', flag: 'IN', region: 'Andhra Pradesh & Telangana' },
+  { code: 'ur', name: 'Urdu', nativeName: 'اردو', flag: 'PK', region: 'South Asia' },
+  { code: 'ne', name: 'Nepali', nativeName: 'नेपाली', flag: 'NP', region: 'Nepal & Himalayas' },
+  { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ', flag: 'IN', region: 'Punjab, India' },
+];
 
 interface SettingsModalProps {
   open: boolean;
@@ -36,6 +70,8 @@ interface SettingsModalProps {
   gujaratiScript: boolean;
   enabledWorldCalendars: WorldCalendarSystemId[];
   headerSubCalendar: WorldCalendarSystemId | 'none';
+  selectedLanguage?: string;
+  onSelectLanguage?: (code: string) => void;
   primaryTz: TimezoneOption;
   secondaryTz: TimezoneOption;
   googleUser: GoogleUserProfile | null;
@@ -135,6 +171,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   gujaratiScript,
   enabledWorldCalendars,
   headerSubCalendar,
+  selectedLanguage = 'en',
+  onSelectLanguage,
   primaryTz,
   secondaryTz,
   googleUser,
@@ -160,6 +198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [worldFilter, setWorldFilter] = useState('');
+  const [langFilter, setLangFilter] = useState('');
   const [cityDraft, setCityDraft] = useState(weatherLocationQuery);
 
   React.useEffect(() => {
@@ -250,7 +289,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {(
               [
                 { id: 'festivals', label: 'Festivals & Holidays', icon: Sparkles },
-                { id: 'world', label: 'World Calendars (29)', icon: Globe },
+                { id: 'world', label: 'World Calendars (33)', icon: Globe },
+                { id: 'language', label: 'Language & Locale', icon: Languages },
                 { id: 'google', label: 'Google Calendar', icon: Calendar },
                 { id: 'display', label: 'Display & Weather', icon: SlidersHorizontal },
               ] as const
@@ -398,7 +438,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF]">
                   <div>
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      World Calendar Systems ({enabledWorldCalendars.length} / {WORLD_CALENDAR_SYSTEMS.length} active)
+                      Unified Calendar Systems ({enabledWorldCalendars.length} / {WORLD_CALENDAR_SYSTEMS.length} active)
                     </h3>
                     <p className="text-[12px] text-[#737373] mt-0.5">
                       Live conversion for{' '}
@@ -406,7 +446,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {MONTH_NAMES[anchorDate.getMonth()]} {anchorDate.getDate()},{' '}
                         {anchorDate.getFullYear()}
                       </span>
-                      . Enabled calendars appear in the Right Panel Almanac.
+                      . Enabled calendars appear in the Left Sidebar, Calendar Canvas, and Almanac.
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -427,32 +467,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Day-Column Secondary Calendar Header Picker */}
-                <div className="bg-[#FAFAFA] border border-[#ECECEC] rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                {/* Primary & Sub-header Calendar Selectors */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#FAFAFA] border border-[#ECECEC] rounded-lg p-3">
+                  <div>
+                    <div className="text-[12.5px] font-medium text-[#1A1A1A]">
+                      Primary calendar system
+                    </div>
+                    <div className="text-[11px] text-[#7A7A7A] mb-1.5">
+                      Determines primary date display format.
+                    </div>
+                    <select
+                      value="gregorian"
+                      onChange={() => {}}
+                      className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                    >
+                      <option value="gregorian">Gregorian (Standard International)</option>
+                      {WORLD_CALENDAR_SYSTEMS.map((sys) => (
+                        <option key={sys.id} value={sys.id}>
+                          {sys.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <div className="text-[12.5px] font-medium text-[#1A1A1A]">
                       Day column sub-header calendar
                     </div>
-                    <div className="text-[11px] text-[#7A7A7A]">
-                      Shown directly beneath each date on the calendar grid.
+                    <div className="text-[11px] text-[#7A7A7A] mb-1.5">
+                      Secondary label beneath dates on calendar grid.
                     </div>
+                    <select
+                      value={headerSubCalendar}
+                      onChange={(e) =>
+                        onSetHeaderSubCalendar(
+                          e.target.value as WorldCalendarSystemId | 'none'
+                        )
+                      }
+                      className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                    >
+                      <option value="none">None (Gregorian only)</option>
+                      {WORLD_CALENDAR_SYSTEMS.map((sys) => (
+                        <option key={sys.id} value={sys.id}>
+                          {sys.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <select
-                    value={headerSubCalendar}
-                    onChange={(e) =>
-                      onSetHeaderSubCalendar(
-                        e.target.value as WorldCalendarSystemId | 'none'
-                      )
-                    }
-                    className="bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1] shrink-0"
-                  >
-                    <option value="none">None (Gregorian only)</option>
-                    {WORLD_CALENDAR_SYSTEMS.map((sys) => (
-                      <option key={sys.id} value={sys.id}>
-                        {sys.name}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Search filter */}
@@ -460,7 +521,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="text"
                   value={worldFilter}
                   onChange={(e) => setWorldFilter(e.target.value)}
-                  placeholder="Filter 29 calendars (e.g. Tamil, Hebrew, Maya, Saka, Islamic, Chinese...)"
+                  placeholder="Filter 32 calendar systems (e.g. ISO Week, Academic, Fiscal, Tamil, Hebrew, Islamic, Chinese...)"
                   className="w-full bg-white border border-[#E2E2E2] rounded-md px-3 py-1.5 text-[12.5px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#3B9AE1]"
                 />
 
@@ -540,6 +601,134 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
+            {/* ==================== TAB: LANGUAGE & LOCALE ==================== */}
+            {tab === 'language' && (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF]">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                      Language &amp; Regional Localization
+                    </h3>
+                    <p className="text-[12px] text-[#737373] mt-0.5">
+                      Choose your preferred interface and cultural calendar language.
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-medium text-[#185D8F] bg-[#EFF8FF] border border-[#B2DDFF] px-2.5 py-0.5 rounded-full shrink-0">
+                    {SUPPORTED_LANGUAGES.find((l) => l.code === (selectedLanguage || 'en'))?.nativeName || 'English'}
+                  </span>
+                </div>
+
+                {/* Quick select pills */}
+                <div>
+                  <div className="text-[11px] font-semibold text-[#737373] mb-1.5 uppercase tracking-wider">
+                    Popular Languages
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SUPPORTED_LANGUAGES.slice(0, 8).map((lang) => {
+                      const isSelected = (selectedLanguage || 'en') === lang.code;
+                      return (
+                        <button
+                          key={lang.code}
+                          type="button"
+                          onClick={() => onSelectLanguage?.(lang.code)}
+                          className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-[#1A1A1A] text-white shadow-xs'
+                              : 'bg-[#F2F4F7] text-[#344054] hover:bg-[#EAECF0]'
+                          }`}
+                        >
+                          <span className="font-mono text-[10px] font-bold opacity-75">{lang.flag}</span>
+                          <span>{lang.nativeName}</span>
+                          <span className="text-[10px] opacity-60">({lang.name})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Search / Filter input */}
+                <div className="pt-2">
+                  <input
+                    type="text"
+                    placeholder="Search all 21 supported languages by name, native script, or region..."
+                    value={langFilter}
+                    onChange={(e) => setLangFilter(e.target.value)}
+                    className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#185D8F]"
+                  />
+                </div>
+
+                {/* Full Language Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[320px] overflow-y-auto cal-scroll pr-1">
+                  {SUPPORTED_LANGUAGES.filter(
+                    (l) =>
+                      !langFilter ||
+                      l.name.toLowerCase().includes(langFilter.toLowerCase()) ||
+                      l.nativeName.toLowerCase().includes(langFilter.toLowerCase()) ||
+                      l.region.toLowerCase().includes(langFilter.toLowerCase()) ||
+                      l.code.toLowerCase().includes(langFilter.toLowerCase())
+                  ).map((lang) => {
+                    const isSelected = (selectedLanguage || 'en') === lang.code;
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => onSelectLanguage?.(lang.code)}
+                        className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                          isSelected
+                            ? 'bg-[#F0F9FF] border-[#0284C7] shadow-2xs'
+                            : 'bg-white border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-7 h-7 rounded-md bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center font-bold text-[10.5px] text-[#374151] shrink-0 font-mono">
+                            {lang.flag}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[12.5px] font-semibold text-[#111827] leading-tight truncate">
+                              {lang.nativeName}{' '}
+                              <span className="text-[11px] font-normal text-[#6B7280]">
+                                ({lang.name})
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-[#6B7280] truncate mt-0.5">
+                              {lang.region}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isSelected ? (
+                          <span className="w-5 h-5 rounded-full bg-[#0284C7] text-white flex items-center justify-center shrink-0">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-[#9CA3AF] shrink-0 font-mono">
+                            {lang.code.toUpperCase()}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Cultural Script Quick Toggle */}
+                <div className="pt-3 border-t border-[#EFEFEF] flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[12.5px] font-medium text-[#1A1A1A]">
+                      Gujarati Script Labels (<span className="font-gujarati">ગુજરાતી</span>)
+                    </div>
+                    <div className="text-[11px] text-[#7A7A7A] mt-0.5">
+                      Display Panchang Tithis and festival headers in native Gujarati script.
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    checked={gujaratiScript}
+                    onChange={onToggleGujaratiScript}
+                    label="Toggle Gujarati script labels"
+                  />
+                </div>
+              </div>
+            )}
+
             {/* ==================== TAB 3: GOOGLE CALENDAR ==================== */}
             {tab === 'google' && (
               <div className="space-y-4">
@@ -548,7 +737,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Google Calendar Sync
                   </h3>
                   <p className="text-[12px] text-[#737373] mt-0.5 leading-relaxed">
-                    Connect your Google account to sync your real calendars and manage events, birthdays, memorials, and workspace plans directly from Samay Calendar.
+                    Connect your Google account to sync your real calendars and manage events, birthdays, memorials, and workspace plans directly from calendar.q.
                   </p>
                 </div>
 

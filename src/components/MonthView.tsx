@@ -8,7 +8,7 @@ import {
 } from '../types/calendar';
 import { getFestivalsForDate } from '../data/festivalsAndDays';
 import { getGujaratiPanchang } from '../data/gujaratiPanchang';
-import { convertToWorldCalendar } from '../data/worldCalendars';
+import { convertToWorldCalendar, getWorldCalendarsForDate } from '../data/worldCalendars';
 import {
   COLOR_THEMES,
   DAY_NAMES_SHORT,
@@ -26,6 +26,7 @@ interface MonthViewProps {
   visibleLayerIds: Set<string>;
   showGujaratiCalendar: boolean;
   headerSubCalendar: WorldCalendarSystemId | 'none';
+  enabledWorldCalendars?: WorldCalendarSystemId[];
   gujaratiScript: boolean;
   selectedEventId: string | null;
   selectedFestivalId: string | null;
@@ -45,6 +46,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
   visibleLayerIds,
   showGujaratiCalendar,
   headerSubCalendar,
+  enabledWorldCalendars = [],
   gujaratiScript,
   selectedEventId,
   selectedFestivalId,
@@ -95,10 +97,13 @@ export const MonthView: React.FC<MonthViewProps> = ({
           const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
           const isToday = isSameDay(day, today);
           const panchang = getGujaratiPanchang(day);
-          const subCalVal =
-            effectiveSubCal !== 'none'
-              ? convertToWorldCalendar(day, effectiveSubCal, gujaratiScript)
-              : null;
+          const activeList =
+            enabledWorldCalendars.length > 0
+              ? enabledWorldCalendars
+              : effectiveSubCal !== 'none'
+              ? [effectiveSubCal]
+              : [];
+          const dayCalVals = getWorldCalendarsForDate(day, activeList, gujaratiScript);
 
           const festivals = getFestivalsForDate(day, visibleLayerIds);
           const dayEvents = visibleEvents
@@ -142,26 +147,61 @@ export const MonthView: React.FC<MonthViewProps> = ({
                   {day.getDate()}
                 </button>
 
-                {subCalVal && !isPhone && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectDayPanchang(day, panchang)}
-                    title={`${subCalVal.name}: ${subCalVal.formatted}`}
-                    className={`text-[10px] truncate max-w-[72%] px-1 rounded leading-tight cursor-pointer ${
-                      effectiveSubCal === 'gujarati-vikram' && gujaratiScript
-                        ? 'font-gujarati'
-                        : ''
-                    } ${
-                      effectiveSubCal === 'gujarati-vikram' &&
-                      (panchang.tithiNum === 15 || panchang.tithiNum === 11)
-                        ? 'text-[#9A5B00] bg-[#FEF5D9]/80 font-medium'
-                        : isCurrentMonth
-                        ? 'text-[#948366] hover:bg-[#F5F2EB]'
-                        : 'text-[#C8BFA8]'
-                    }`}
-                  >
-                    {subCalVal.shortLabel}
-                  </button>
+                {dayCalVals.length > 0 && !isPhone && (
+                  <div className="flex items-center gap-0.5 max-w-[72%] overflow-hidden">
+                    {dayCalVals.slice(0, 2).map((calVal) => {
+                      const isHighlighted =
+                        calVal.id === 'gujarati-vikram' &&
+                        (panchang.tithiNum === 15 || panchang.tithiNum === 11);
+
+                      const badgeStyle =
+                        calVal.id === 'gujarati-vikram'
+                          ? isHighlighted
+                            ? 'text-[#9A5B00] bg-[#FEF5D9]'
+                            : 'text-[#8A6D2D] bg-[#FDF8EC]'
+                          : calVal.id === 'islamic-hijri'
+                          ? 'text-[#1D6F42] bg-[#EAF7EE]'
+                          : calVal.id === 'hebrew'
+                          ? 'text-[#1B5E8A] bg-[#E8F3FA]'
+                          : calVal.id === 'chinese'
+                          ? 'text-[#A02828] bg-[#FCEAEA]'
+                          : calVal.id === 'solar-hijri'
+                          ? 'text-[#B25900] bg-[#FFF2E2]'
+                          : calVal.id === 'iso-week'
+                          ? 'text-[#4A4A4A] bg-[#F0F0F0] font-mono-tabular'
+                          : calVal.id === 'academic'
+                          ? 'text-[#8C2A1C] bg-[#F8DFD6]'
+                          : calVal.id === 'fiscal'
+                          ? 'text-[#525252] bg-[#EFEFEF]'
+                          : 'text-[#616161] bg-[#F4F4F4]';
+
+                      return (
+                        <button
+                          key={calVal.id}
+                          type="button"
+                          onClick={() => onSelectDayPanchang(day, panchang)}
+                          title={`${calVal.name}: ${calVal.formatted} · ${calVal.detail}`}
+                          className={`text-[9.5px] truncate max-w-[85px] px-1 py-[0.5px] rounded leading-tight cursor-pointer ${
+                            calVal.id === 'gujarati-vikram' && gujaratiScript
+                              ? 'font-gujarati'
+                              : ''
+                          } ${badgeStyle}`}
+                        >
+                          {calVal.shortLabel}
+                        </button>
+                      );
+                    })}
+                    {dayCalVals.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectDayPanchang(day, panchang)}
+                        title={dayCalVals.map((c) => `${c.name}: ${c.formatted}`).join('\n')}
+                        className="text-[9px] text-[#737373] bg-[#EFEFEF] hover:bg-[#E0E0E0] px-1 py-[0.5px] rounded cursor-pointer shrink-0"
+                      >
+                        +{dayCalVals.length - 2}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 
