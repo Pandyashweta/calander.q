@@ -8,7 +8,8 @@ import {
 } from '../types/calendar';
 import { getFestivalsForDate } from '../data/festivalsAndDays';
 import { getGujaratiPanchang } from '../data/gujaratiPanchang';
-import { convertToWorldCalendar, getWorldCalendarsForDate } from '../data/worldCalendars';
+import { getWorldCalendarsForDate } from '../data/worldCalendars';
+import { HolidayRegionCode } from '../utils/deviceUtils';
 import {
   COLOR_THEMES,
   DAY_NAMES_SHORT,
@@ -28,6 +29,7 @@ interface MonthViewProps {
   headerSubCalendar: WorldCalendarSystemId | 'none';
   enabledWorldCalendars?: WorldCalendarSystemId[];
   gujaratiScript: boolean;
+  holidayRegion?: HolidayRegionCode;
   selectedEventId: string | null;
   selectedFestivalId: string | null;
   isPhone?: boolean;
@@ -48,6 +50,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
   headerSubCalendar,
   enabledWorldCalendars = [],
   gujaratiScript,
+  holidayRegion = 'IN',
   selectedEventId,
   selectedFestivalId,
   isPhone = false,
@@ -105,7 +108,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
               : [];
           const dayCalVals = getWorldCalendarsForDate(day, activeList, gujaratiScript);
 
-          const festivals = getFestivalsForDate(day, visibleLayerIds);
+          const festivals = getFestivalsForDate(day, visibleLayerIds, holidayRegion);
           const dayEvents = visibleEvents
             .filter((e) => e.startDate <= dateKey && e.endDate >= dateKey)
             .sort((a, b) => {

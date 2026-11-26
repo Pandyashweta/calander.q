@@ -383,28 +383,187 @@ for (const rule of FIXED_ANNUAL_DAYS) {
   fixedByMmDd.set(rule.mmdd, existing);
 }
 
+interface RegionalFixedHoliday {
+  mmdd: string;
+  title: string;
+  description: string;
+  isMajor?: boolean;
+}
+
+const REGIONAL_FIXED_HOLIDAYS: Record<string, RegionalFixedHoliday[]> = {
+  US: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Federal public holiday in the United States.', isMajor: true },
+    { mmdd: '06-19', title: 'Juneteenth National Independence Day', description: 'Federal holiday commemorating the end of slavery in the United States.', isMajor: true },
+    { mmdd: '07-04', title: 'Independence Day', description: 'US federal holiday celebrating the Declaration of Independence.', isMajor: true },
+    { mmdd: '11-11', title: 'Veterans Day', description: 'Federal holiday honoring military veterans of the United States Armed Forces.' },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'Federal public holiday celebrated across the United States.', isMajor: true },
+  ],
+  GB: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Bank holiday across the United Kingdom.', isMajor: true },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'UK bank holiday.', isMajor: true },
+    { mmdd: '12-26', title: 'Boxing Day', description: 'UK bank holiday following Christmas Day.', isMajor: true },
+  ],
+  CA: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Statutory public holiday across Canada.', isMajor: true },
+    { mmdd: '07-01', title: 'Canada Day', description: 'National statutory holiday celebrating Canadian Confederation.', isMajor: true },
+    { mmdd: '09-30', title: 'National Day for Truth and Reconciliation', description: 'Canadian federal statutory holiday.' },
+    { mmdd: '11-11', title: 'Remembrance Day', description: 'Day honoring members of the Canadian Armed Forces.' },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'Statutory holiday across Canada.', isMajor: true },
+    { mmdd: '12-26', title: 'Boxing Day', description: 'Public holiday in Canada.' },
+  ],
+  AU: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'National public holiday in Australia.', isMajor: true },
+    { mmdd: '01-26', title: 'Australia Day', description: 'Official national day of Australia.', isMajor: true },
+    { mmdd: '04-25', title: 'ANZAC Day', description: 'National day of remembrance in Australia and New Zealand.', isMajor: true },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'National public holiday in Australia.', isMajor: true },
+    { mmdd: '12-26', title: 'Boxing Day', description: 'National public holiday in Australia.' },
+  ],
+  EU: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Public holiday across the European Union.', isMajor: true },
+    { mmdd: '05-01', title: 'Labour Day', description: 'International Workers’ Day public holiday across Europe.', isMajor: true },
+    { mmdd: '05-09', title: 'Europe Day', description: 'Celebration of peace and unity in Europe.' },
+    { mmdd: '08-15', title: 'Assumption Day', description: 'Public holiday observed in many European countries.' },
+    { mmdd: '11-01', title: "All Saints' Day", description: 'Public holiday observed across many European regions.' },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'Public holiday across Europe.', isMajor: true },
+    { mmdd: '12-26', title: "St. Stephen's Day", description: 'Second day of Christmas observed across Europe.' },
+  ],
+  JP: [
+    { mmdd: '01-01', title: "New Year's Day (Ganjitsu)", description: 'Japanese national holiday.', isMajor: true },
+    { mmdd: '02-11', title: 'National Foundation Day', description: 'Japanese national holiday celebrating the founding of Japan.' },
+    { mmdd: '02-23', title: "Emperor's Birthday", description: 'Japanese national holiday.' },
+    { mmdd: '04-29', title: 'Showa Day', description: 'Opening public holiday of Golden Week in Japan.' },
+    { mmdd: '05-03', title: 'Constitution Memorial Day', description: 'Japanese national holiday during Golden Week.', isMajor: true },
+    { mmdd: '05-04', title: 'Greenery Day', description: 'Japanese national holiday celebrating nature.' },
+    { mmdd: '05-05', title: "Children's Day (Kodomo no Hi)", description: 'Japanese national holiday.', isMajor: true },
+    { mmdd: '08-11', title: 'Mountain Day', description: 'Japanese national holiday.' },
+    { mmdd: '11-03', title: 'Culture Day', description: 'Japanese national holiday promoting arts and culture.' },
+    { mmdd: '11-23', title: 'Labour Thanksgiving Day', description: 'Japanese national holiday.' },
+  ],
+  AE: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Public holiday in the United Arab Emirates.', isMajor: true },
+    { mmdd: '12-01', title: 'Commemoration Day', description: 'UAE national remembrance day.' },
+    { mmdd: '12-02', title: 'UAE National Day (Eid Al Etihad)', description: 'Celebration of the union of the United Arab Emirates.', isMajor: true },
+    { mmdd: '12-03', title: 'UAE National Day Holiday', description: 'Second day of UAE National Day celebrations.' },
+  ],
+  SG: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'Public holiday in Singapore.', isMajor: true },
+    { mmdd: '05-01', title: 'Labour Day', description: 'Public holiday in Singapore.', isMajor: true },
+    { mmdd: '08-09', title: 'Singapore National Day', description: 'Celebration of Singapore’s independence.', isMajor: true },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'Public holiday in Singapore.', isMajor: true },
+  ],
+  GLOBAL: [
+    { mmdd: '01-01', title: "New Year's Day", description: 'International public holiday welcoming the new year.', isMajor: true },
+    { mmdd: '05-01', title: 'International Workers’ Day', description: 'Public holiday celebrated globally.', isMajor: true },
+    { mmdd: '12-25', title: 'Christmas Day', description: 'Widely observed international holiday.', isMajor: true },
+  ],
+};
+
+function getRegionalFloatingHolidays(date: Date, regionCode: string): FestivalItem[] {
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const dow = date.getDay();
+  const dateKey = formatDateKey(date);
+  const items: FestivalItem[] = [];
+
+  const isNthWeekday = (n: number, weekday: number) =>
+    dow === weekday && Math.ceil(day / 7) === n;
+
+  const isLastWeekday = (weekday: number) => {
+    if (dow !== weekday) return false;
+    const nextWeek = new Date(year, month - 1, day + 7);
+    return nextWeek.getMonth() !== month - 1;
+  };
+
+  if (regionCode === 'US') {
+    if (month === 1 && isNthWeekday(3, 1)) {
+      items.push({ id: `reg-us-${dateKey}-mlk`, date: dateKey, title: 'Martin Luther King Jr. Day', layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday honoring civil rights leader Dr. Martin Luther King Jr.', region: 'US', isMajor: true });
+    }
+    if (month === 2 && isNthWeekday(3, 1)) {
+      items.push({ id: `reg-us-${dateKey}-pres`, date: dateKey, title: "Presidents' Day", layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday (Washington’s Birthday).', region: 'US' });
+    }
+    if (month === 5 && isLastWeekday(1)) {
+      items.push({ id: `reg-us-${dateKey}-mem`, date: dateKey, title: 'Memorial Day', layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday honoring fallen military service members.', region: 'US', isMajor: true });
+    }
+    if (month === 9 && isNthWeekday(1, 1)) {
+      items.push({ id: `reg-us-${dateKey}-labor`, date: dateKey, title: 'Labor Day', layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday celebrating American workers.', region: 'US', isMajor: true });
+    }
+    if (month === 10 && isNthWeekday(2, 1)) {
+      items.push({ id: `reg-us-${dateKey}-indig`, date: dateKey, title: 'Indigenous Peoples’ / Columbus Day', layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday observed on the second Monday of October.', region: 'US' });
+    }
+    if (month === 11 && isNthWeekday(4, 4)) {
+      items.push({ id: `reg-us-${dateKey}-thanks`, date: dateKey, title: 'Thanksgiving Day', layerId: 'national-holidays', categoryLabel: 'US Holiday', description: 'US federal holiday of gratitude and harvest.', region: 'US', isMajor: true });
+    }
+  } else if (regionCode === 'GB') {
+    if (month === 5 && isNthWeekday(1, 1)) {
+      items.push({ id: `reg-gb-${dateKey}-earlymay`, date: dateKey, title: 'Early May Bank Holiday', layerId: 'national-holidays', categoryLabel: 'UK Bank Holiday', description: 'Public bank holiday across the United Kingdom.', region: 'GB' });
+    }
+    if (month === 5 && isLastWeekday(1)) {
+      items.push({ id: `reg-gb-${dateKey}-spring`, date: dateKey, title: 'Spring Bank Holiday', layerId: 'national-holidays', categoryLabel: 'UK Bank Holiday', description: 'Public bank holiday across the United Kingdom.', region: 'GB' });
+    }
+    if (month === 8 && isLastWeekday(1)) {
+      items.push({ id: `reg-gb-${dateKey}-summer`, date: dateKey, title: 'Summer Bank Holiday', layerId: 'national-holidays', categoryLabel: 'UK Bank Holiday', description: 'Late summer bank holiday in England, Wales, and Northern Ireland.', region: 'GB' });
+    }
+  } else if (regionCode === 'CA') {
+    if (month === 5 && dow === 1 && day >= 18 && day <= 24) {
+      items.push({ id: `reg-ca-${dateKey}-victoria`, date: dateKey, title: 'Victoria Day', layerId: 'national-holidays', categoryLabel: 'Canada Holiday', description: 'Canadian federal statutory holiday.', region: 'CA' });
+    }
+    if (month === 9 && isNthWeekday(1, 1)) {
+      items.push({ id: `reg-ca-${dateKey}-labour`, date: dateKey, title: 'Labour Day', layerId: 'national-holidays', categoryLabel: 'Canada Holiday', description: 'Statutory holiday across Canada.', region: 'CA', isMajor: true });
+    }
+    if (month === 10 && isNthWeekday(2, 1)) {
+      items.push({ id: `reg-ca-${dateKey}-thanks`, date: dateKey, title: 'Thanksgiving Day (Canada)', layerId: 'national-holidays', categoryLabel: 'Canada Holiday', description: 'Statutory holiday across most of Canada.', region: 'CA', isMajor: true });
+    }
+  } else if (regionCode === 'JP') {
+    if (month === 1 && isNthWeekday(2, 1)) {
+      items.push({ id: `reg-jp-${dateKey}-seijin`, date: dateKey, title: 'Coming of Age Day', layerId: 'national-holidays', categoryLabel: 'Japan Holiday', description: 'Japanese national holiday.', region: 'JP' });
+    }
+    if (month === 7 && isNthWeekday(3, 1)) {
+      items.push({ id: `reg-jp-${dateKey}-umi`, date: dateKey, title: 'Marine Day', layerId: 'national-holidays', categoryLabel: 'Japan Holiday', description: 'Japanese national holiday.', region: 'JP' });
+    }
+    if (month === 9 && isNthWeekday(3, 1)) {
+      items.push({ id: `reg-jp-${dateKey}-keiro`, date: dateKey, title: 'Respect for the Aged Day', layerId: 'national-holidays', categoryLabel: 'Japan Holiday', description: 'Japanese national holiday.', region: 'JP' });
+    }
+    if (month === 10 && isNthWeekday(2, 1)) {
+      items.push({ id: `reg-jp-${dateKey}-sports`, date: dateKey, title: 'Sports Day', layerId: 'national-holidays', categoryLabel: 'Japan Holiday', description: 'Japanese national holiday.', region: 'JP' });
+    }
+  }
+
+  return items;
+}
+
 /**
- * Returns ALL synced festivals, special days, holidays, and major Gujarati lunar observances
- * (Poonam, Amas, Agiyaras/Ekadashi) for a given date, filtered by currently visible layer IDs.
+ * Returns ALL synced festivals, special days, regional local holidays, and Gujarati lunar observances
+ * for a given date, filtered by currently visible layer IDs and local holiday region.
  */
 export function getFestivalsForDate(
   date: Date,
-  visibleLayerIds?: Set<string>
+  visibleLayerIds?: Set<string>,
+  regionCode: string = 'IN'
 ): FestivalItem[] {
   const dateKey = formatDateKey(date);
   const mmdd = dateKey.slice(5); // MM-DD
   const results: FestivalItem[] = [];
 
-  // 1. Multi-year curated lunar festivals
+  // 1. Multi-year curated lunar festivals (for national-holidays, only include Indian gazetted ones if region is IN)
   const curated = yearlyByDate.get(dateKey);
   if (curated) {
-    results.push(...curated);
+    for (const item of curated) {
+      if (item.layerId === 'national-holidays' && regionCode !== 'IN') {
+        // Keep Good Friday for Western/Global regions as well
+        if (!item.title.toLowerCase().includes('good friday')) continue;
+      }
+      results.push(item);
+    }
   }
 
-  // 2. Fixed annual global, Indian, and national holidays
+  // 2. Fixed annual global, Indian, and regional national holidays
   const fixed = fixedByMmDd.get(mmdd);
   if (fixed) {
     for (const rule of fixed) {
+      if (rule.layerId === 'national-holidays' && regionCode !== 'IN') {
+        continue;
+      }
       results.push({
         id: `fixed-${dateKey}-${rule.layerId}-${rule.title.slice(0, 12).replace(/\W+/g, '').toLowerCase()}`,
         date: dateKey,
@@ -418,13 +577,32 @@ export function getFestivalsForDate(
     }
   }
 
+  // 2b. Non-India Regional Local Holidays
+  if (regionCode !== 'IN') {
+    const regionalList = REGIONAL_FIXED_HOLIDAYS[regionCode] || REGIONAL_FIXED_HOLIDAYS.GLOBAL;
+    for (const h of regionalList) {
+      if (h.mmdd === mmdd) {
+        results.push({
+          id: `reg-${regionCode.toLowerCase()}-${dateKey}-${h.title.slice(0, 12).replace(/\W+/g, '').toLowerCase()}`,
+          date: dateKey,
+          title: h.title,
+          layerId: 'national-holidays',
+          categoryLabel: `${regionCode === 'GLOBAL' ? 'Public' : regionCode} Holiday`,
+          description: h.description,
+          region: regionCode,
+          isMajor: h.isMajor,
+        });
+      }
+    }
+    results.push(...getRegionalFloatingHolidays(date, regionCode));
+  }
+
   // 3. Floating weekday observances
   results.push(...getFloatingDaysForDate(date));
 
-  // 4. Astronomical Gujarati Tithi observances (Poonam, Amas, Ekadashi/Agiyaras, Sankashti Choth)
+  // 4. Astronomical Gujarati Tithi observances (controlled by gujarati-calendar layer under World Calendars)
   const panchang = getGujaratiPanchang(date);
   if (panchang.specialTithi) {
-    // Avoid duplicate title if a curated Gujarati festival already describes this Poonam/Agiyaras on the same date
     const alreadyHasGujaratiMajor = results.some(
       (r) =>
         r.layerId === 'gujarati-calendar' &&
@@ -451,15 +629,15 @@ export function getFestivalsForDate(
 }
 
 /**
- * Returns searchable list of all curated festivals + fixed days for a given year (used by Search & Command Menu & Go-to-Date).
+ * Returns searchable list of all curated festivals + regional holidays for a given year.
  */
-export function getAllFestivalsForYear(year: number): FestivalItem[] {
+export function getAllFestivalsForYear(year: number, regionCode: string = 'IN'): FestivalItem[] {
   const all: FestivalItem[] = [];
   const start = new Date(year, 0, 1);
   const end = new Date(year, 11, 31);
   const cur = new Date(start);
   while (cur <= end) {
-    all.push(...getFestivalsForDate(cur));
+    all.push(...getFestivalsForDate(cur, undefined, regionCode));
     cur.setDate(cur.getDate() + 1);
   }
   return all;

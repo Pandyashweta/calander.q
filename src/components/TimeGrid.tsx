@@ -17,6 +17,7 @@ import {
 import { getFestivalsForDate } from '../data/festivalsAndDays';
 import { getGujaratiPanchang } from '../data/gujaratiPanchang';
 import { convertToWorldCalendar, getWorldCalendarsForDate } from '../data/worldCalendars';
+import { HolidayRegionCode } from '../utils/deviceUtils';
 import {
   COLOR_THEMES,
   DAY_NAMES_SHORT,
@@ -42,6 +43,7 @@ interface TimeGridProps {
   headerSubCalendar: WorldCalendarSystemId | 'none';
   enabledWorldCalendars?: WorldCalendarSystemId[];
   gujaratiScript: boolean;
+  holidayRegion?: HolidayRegionCode;
   primaryTz: TimezoneOption;
   secondaryTz: TimezoneOption;
   selectedEventId: string | null;
@@ -90,6 +92,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
   headerSubCalendar,
   enabledWorldCalendars = [],
   gujaratiScript,
+  holidayRegion = 'IN',
   primaryTz,
   secondaryTz,
   selectedEventId,
@@ -217,7 +220,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
     const perDay = visibleDays.map((day, idx) => {
       const key = visibleDateKeys[idx];
       const userAllDay = singleDayEventsMap.get(key) || [];
-      const festivals = getFestivalsForDate(day, visibleLayerIds);
+      const festivals = getFestivalsForDate(day, visibleLayerIds, holidayRegion);
       return {
         dateKey: key,
         panchang: panchangByDay[idx],
@@ -227,7 +230,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
     });
 
     return { spanningAllDayEvents: spanning, perDayAllDayItems: perDay };
-  }, [events, visibleDays, visibleDateKeys, visibleLayerIds, panchangByDay]);
+  }, [events, visibleDays, visibleDateKeys, visibleLayerIds, panchangByDay, holidayRegion]);
 
   const maxPerDayAllDayCount = useMemo(
     () =>

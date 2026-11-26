@@ -28,6 +28,7 @@ const provider = new GoogleAuthProvider();
 for (const scope of SCOPES) {
   provider.addScope(scope);
 }
+provider.setCustomParameters({ prompt: 'select_account' });
 
 // Strict in-memory access token cache (never stored in localStorage/sessionStorage)
 let isSigningIn = false;
@@ -69,14 +70,26 @@ export const googleSignIn = async (): Promise<{
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Could not obtain Google Calendar access token.');
+    const accessToken = credential?.accessToken || '';
+    if (accessToken) {
+      cachedAccessToken = accessToken;
     }
-    cachedAccessToken = credential.accessToken;
     return {
       user: toUserProfile(result.user),
-      accessToken: cachedAccessToken,
+      accessToken,
     };
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      throw new Error('Google sign-in popup was closed before completing.');
+    }
+    if (code === 'auth/popup-blocked') {
+      throw new Error('Browser blocked the Google sign-in popup. Please allow popups for this site and try again.');
+    }
+    if (code === 'auth/unauthorized-domain') {
+      throw new Error('This preview domain is not authorized in Firebase Auth. Use a local device account or open in the deployed origin.');
+    }
+    throw new Error(err?.message || 'Google sign-in failed. Please try again.');
   } finally {
     isSigningIn = false;
   }
@@ -115,6 +128,7 @@ interface GoogleCalendarListItem {
 export async function fetchGoogleCalendars(
   accessToken: string
 ): Promise<CalendarLayer[]> {
+  if (!accessToken) return [];
   const res = await fetch(
     'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader',
     {
@@ -132,7 +146,8 @@ export async function fetchGoogleCalendars(
     name: item.summary || (item.primary ? 'Primary Calendar' : 'Google Calendar'),
     groupId: 'google-calendars',
     color: GOOGLE_COLOR_PALETTE[idx % GOOGLE_COLOR_PALETTE.length],
-    visible: item.selected !== false,
+    // Keep unchecked on initial sign-in so only Holidays appear until user opts in
+    visible: false,
     type: 'google',
     description: item.description,
     googleCalendarId: item.id,

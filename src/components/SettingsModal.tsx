@@ -1,19 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
+  AlertCircle,
   Calendar,
   Check,
+  CheckCircle2,
   CloudSun,
+  Download,
   ExternalLink,
+  FileText,
   Globe,
+  Keyboard,
   Languages,
   LocateFixed,
   LogOut,
+  Monitor,
   RefreshCw,
+  Search,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
+  Upload,
   X,
 } from 'lucide-react';
 import {
+  CalendarEvent,
   CalendarLayer,
   GoogleUserProfile,
   TimezoneOption,
@@ -27,8 +37,22 @@ import {
   convertToWorldCalendar,
 } from '../data/worldCalendars';
 import { COLOR_THEMES, MONTH_NAMES, TIMEZONE_OPTIONS } from '../utils/dateUtils';
+import {
+  HOLIDAY_REGIONS,
+  HolidayRegionCode,
+  getRegionLabel,
+} from '../utils/deviceUtils';
+import { buildIcs, downloadIcs, parseIcsEvents } from '../utils/icsExport';
 
-export type SettingsTab = 'festivals' | 'world' | 'language' | 'google' | 'display';
+export type SettingsTab =
+  | 'festivals'
+  | 'world'
+  | 'display'
+  | 'sync'
+  | 'shortcuts'
+  | 'google'
+  | 'language'
+  | 'apps';
 
 export interface LanguageOption {
   code: string;
@@ -62,12 +86,51 @@ export const SUPPORTED_LANGUAGES: LanguageOption[] = [
   { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ', flag: 'IN', region: 'Punjab, India' },
 ];
 
+const SHORTCUT_CATEGORIES = [
+  {
+    name: 'Navigation & Views',
+    items: [
+      { keys: ['T'], desc: 'Jump to Today' },
+      { keys: ['D'], desc: 'Switch to Day view' },
+      { keys: ['3'], desc: 'Switch to 3-Day view' },
+      { keys: ['5'], desc: 'Switch to 5-Day view' },
+      { keys: ['W'], desc: 'Switch to Week view' },
+      { keys: ['M'], desc: 'Switch to Full Month view' },
+      { keys: ['J', 'or', '→'], desc: 'Next period' },
+      { keys: ['K', 'or', '←'], desc: 'Previous period' },
+      { keys: ['G'], desc: 'Go to Date / Festival jump' },
+    ],
+  },
+  {
+    name: 'Events & Actions',
+    items: [
+      { keys: ['C', 'or', 'N'], desc: 'Create new event' },
+      { keys: ['⌘/Ctrl', 'K'], desc: 'Open Command Menu & Search' },
+      { keys: ['/'], desc: 'Quick search events & festivals' },
+      { keys: ['⌘/Ctrl', 'E'], desc: 'Open .ics Calendar Sync in Settings' },
+      { keys: ['Esc'], desc: 'Close active dialog or menu' },
+    ],
+  },
+  {
+    name: 'Workspace & Overlays',
+    items: [
+      { keys: ['['], desc: 'Toggle left sidebar' },
+      { keys: [']'], desc: 'Toggle right panel' },
+      { keys: ['H'], desc: 'Toggle Holidays & Festivals' },
+      { keys: ['?'], desc: 'Open Keyboard Shortcuts in Settings' },
+    ],
+  },
+];
+
 interface SettingsModalProps {
   open: boolean;
   initialTab?: SettingsTab;
   anchorDate: Date;
   layers: CalendarLayer[];
+  events: CalendarEvent[];
   gujaratiScript: boolean;
+  holidayRegion: HolidayRegionCode;
+  primaryCalendar: WorldCalendarSystemId;
   enabledWorldCalendars: WorldCalendarSystemId[];
   headerSubCalendar: WorldCalendarSystemId | 'none';
   selectedLanguage?: string;
@@ -83,6 +146,8 @@ interface SettingsModalProps {
   onToggleLayer: (layerId: string) => void;
   onToggleAllCultural: () => void;
   onToggleGujaratiScript: () => void;
+  onSetHolidayRegion: (region: HolidayRegionCode) => void;
+  onSetPrimaryCalendar: (id: WorldCalendarSystemId) => void;
   onToggleWorldCalendar: (id: WorldCalendarSystemId) => void;
   onEnableAllWorldCalendars: (enable: boolean) => void;
   onSetHeaderSubCalendar: (id: WorldCalendarSystemId | 'none') => void;
@@ -94,6 +159,9 @@ interface SettingsModalProps {
   onGoogleSignIn: () => void;
   onGoogleSync: () => void;
   onGoogleLogout: () => void;
+  onImportEvents: (importedEvents: CalendarEvent[]) => void;
+  onOpenDownloadHub?: () => void;
+  showToast?: (msg: string) => void;
 }
 
 interface ToggleSwitchProps {
@@ -168,7 +236,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   initialTab = 'festivals',
   anchorDate,
   layers,
+  events,
   gujaratiScript,
+  holidayRegion,
+  primaryCalendar,
   enabledWorldCalendars,
   headerSubCalendar,
   selectedLanguage = 'en',
@@ -184,6 +255,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onToggleLayer,
   onToggleAllCultural,
   onToggleGujaratiScript,
+  onSetHolidayRegion,
+  onSetPrimaryCalendar,
   onToggleWorldCalendar,
   onEnableAllWorldCalendars,
   onSetHeaderSubCalendar,
@@ -195,18 +268,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onGoogleSignIn,
   onGoogleSync,
   onGoogleLogout,
+  onImportEvents,
+  onOpenDownloadHub,
+  showToast,
 }) => {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [worldFilter, setWorldFilter] = useState('');
   const [langFilter, setLangFilter] = useState('');
+  const [shortcutFilter, setShortcutFilter] = useState('');
+  const [shortcutOs, setShortcutOs] = useState<'mac' | 'win'>(() =>
+    typeof navigator !== 'undefined' && /mac/i.test(navigator.platform) ? 'mac' : 'win'
+  );
   const [cityDraft, setCityDraft] = useState(weatherLocationQuery);
+
+  // .ics sync state
+  const [selectedExportLayers, setSelectedExportLayers] = useState<Set<string>>(
+    () => new Set(layers.filter((l) => l.type === 'personal' || l.type === 'custom').map((l) => l.id))
+  );
+  const [importStatus, setImportStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setCityDraft(weatherLocationQuery);
   }, [weatherLocationQuery]);
 
   React.useEffect(() => {
-    if (open) setTab(initialTab);
+    if (open) {
+      setTab(initialTab);
+      setImportStatus(null);
+      setExportSuccess(false);
+    }
   }, [open, initialTab]);
 
   React.useEffect(() => {
@@ -218,24 +313,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  const culturalLayers = useMemo(
-    () => layers.filter((l) => l.type === 'cultural'),
+  // Ensure device's auto-detected primary/secondary timezone is always present in dropdown options
+  const allTimezoneOptions = useMemo(() => {
+    const map = new Map<string, TimezoneOption>();
+    if (primaryTz) map.set(primaryTz.id, primaryTz);
+    if (secondaryTz) map.set(secondaryTz.id, secondaryTz);
+    for (const tz of TIMEZONE_OPTIONS) {
+      if (!map.has(tz.id)) map.set(tz.id, tz);
+    }
+    return Array.from(map.values());
+  }, [primaryTz, secondaryTz]);
+
+  const holidayAndIndianLayers = useMemo(
+    () => layers.filter((l) => l.id === 'national-holidays' || l.id === 'indian-festivals'),
     [layers]
   );
+
+  const worldOverlayLayers = useMemo(
+    () =>
+      layers.filter(
+        (l) =>
+          l.id === 'gujarati-calendar' ||
+          l.id === 'world-observances' ||
+          l.id === 'global-days'
+      ),
+    [layers]
+  );
+
   const localLayers = useMemo(
-    () => layers.filter((l) => l.type === 'personal'),
+    () => layers.filter((l) => l.type === 'personal' || l.type === 'custom'),
     [layers]
   );
+
   const googleLayers = useMemo(
     () => layers.filter((l) => l.type === 'google'),
     [layers]
   );
 
-  const anyCulturalVisible = culturalLayers.some((l) => l.visible);
-  const enabledSet = useMemo(
-    () => new Set(enabledWorldCalendars),
-    [enabledWorldCalendars]
-  );
+  const anyHolidayVisible = holidayAndIndianLayers.some((l) => l.visible);
+  const enabledSet = useMemo(() => new Set(enabledWorldCalendars), [enabledWorldCalendars]);
 
   const worldConversions = useMemo(() => {
     const q = worldFilter.trim().toLowerCase();
@@ -250,6 +366,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }));
   }, [anchorDate, gujaratiScript, worldFilter]);
 
+  const eventsToExport = useMemo(
+    () => events.filter((ev) => selectedExportLayers.size === 0 || selectedExportLayers.has(ev.calendarId)),
+    [events, selectedExportLayers]
+  );
+
+  const handleDownloadIcs = () => {
+    const icsText = buildIcs(eventsToExport, layers, {
+      calendarName: 'calendar.q Export',
+      timezone: primaryTz.id,
+      scope: 'all',
+    });
+    const dateStr = new Date().toISOString().split('T')[0];
+    downloadIcs(`calendar-q-export-${dateStr}.ics`, icsText);
+    setExportSuccess(true);
+    showToast?.(`Exported ${eventsToExport.length} events to .ics`);
+    window.setTimeout(() => setExportSuccess(false), 3000);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const content = String(ev.target?.result || '');
+        const parsed = parseIcsEvents(content, 'personal');
+        if (parsed.length === 0) {
+          setImportStatus({
+            type: 'error',
+            message: 'No valid VEVENT entries were found in this .ics file.',
+          });
+          return;
+        }
+        onImportEvents(parsed);
+        setImportStatus({
+          type: 'success',
+          message: `Imported ${parsed.length} event${parsed.length === 1 ? '' : 's'} into your local calendar.`,
+        });
+        showToast?.(`Imported ${parsed.length} events from .ics`);
+      } catch {
+        setImportStatus({
+          type: 'error',
+          message: 'Failed to parse this .ics file. Please check the file format.',
+        });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const formatShortcutKey = (key: string) => {
+    if (key === '⌘/Ctrl') return shortcutOs === 'mac' ? '⌘' : 'Ctrl';
+    return key;
+  };
+
   if (!open) return null;
 
   return (
@@ -262,14 +433,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label="Calendar Settings"
-        className="w-full max-w-[760px] h-[min(82vh,640px)] bg-white border border-[#E2E2E2] rounded-xl shadow-xl flex flex-col overflow-hidden"
+        className="w-full max-w-[820px] h-[min(85vh,660px)] bg-white border border-[#E2E2E2] rounded-xl shadow-xl flex flex-col overflow-hidden"
       >
         {/* Top Header */}
         <div className="px-5 py-3.5 border-b border-[#EFEFEF] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-[#525252]" />
             <h2 className="text-[15px] font-semibold text-[#1A1A1A]">
-              Calendar Settings &amp; Integrations
+              Calendar Settings
             </h2>
           </div>
           <button
@@ -282,17 +453,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Body: Responsive Top Tabs on Mobile, Left Sidebar on Desktop */}
+        {/* Body */}
         <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden">
-          {/* Sidebar / Top Tabs */}
-          <nav className="sm:w-[196px] shrink-0 bg-[#FAFAFA] border-b sm:border-b-0 sm:border-r border-[#EFEFEF] p-2 sm:p-2.5 flex sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible cal-scroll">
+          <nav className="sm:w-[204px] shrink-0 bg-[#FAFAFA] border-b sm:border-b-0 sm:border-r border-[#EFEFEF] p-2 sm:p-2.5 flex sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible cal-scroll">
             {(
               [
-                { id: 'festivals', label: 'Festivals & Holidays', icon: Sparkles },
-                { id: 'world', label: 'World Calendars (33)', icon: Globe },
-                { id: 'language', label: 'Language & Locale', icon: Languages },
+                { id: 'festivals', label: 'Holidays & Local', icon: Sparkles },
+                { id: 'world', label: `World Calendars (${WORLD_CALENDAR_SYSTEMS.length})`, icon: Globe },
+                { id: 'display', label: 'Display & Weather', icon: CloudSun },
+                { id: 'sync', label: 'Calendar Sync (.ics)', icon: Download },
+                { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
                 { id: 'google', label: 'Google Calendar', icon: Calendar },
-                { id: 'display', label: 'Display & Weather', icon: SlidersHorizontal },
+                { id: 'language', label: 'Language', icon: Languages },
+                { id: 'apps', label: 'Apps & Widgets', icon: Smartphone },
               ] as const
             ).map((item) => {
               const Icon = item.icon;
@@ -317,34 +490,57 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Active Tab Panel */}
           <div className="flex-1 overflow-y-auto cal-scroll p-4 sm:p-5">
-            {/* ==================== TAB 1: FESTIVALS & HOLIDAYS ==================== */}
+            {/* ==================== TAB 1: HOLIDAYS & LOCAL ==================== */}
             {tab === 'festivals' && (
               <div className="space-y-5">
                 <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#EFEFEF]">
                   <div>
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      Festivals, Tithis &amp; Holidays
+                      Holidays &amp; Indian Festivals
                     </h3>
                     <p className="text-[12px] text-[#737373] mt-0.5">
-                      Toggle individual festival layers or hide every cultural overlay at once.
+                      Holidays automatically match your local region. Gujarati Tithis and World Calendar Festivals live under World Calendars.
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[12px] text-[#525252] font-medium">
-                      {anyCulturalVisible ? 'Visible' : 'All hidden'}
+                      {anyHolidayVisible ? 'Visible' : 'Hidden'}
                     </span>
                     <ToggleSwitch
-                      checked={anyCulturalVisible}
+                      checked={anyHolidayVisible}
                       onChange={onToggleAllCultural}
-                      label="Toggle all festival and holiday layers"
+                      label="Toggle holidays and Indian festivals"
                     />
                   </div>
                 </div>
 
-                {/* Individual Cultural Layer Switches */}
+                {/* Holiday Region Picker */}
+                <div className="p-3.5 rounded-lg bg-[#FAFAFA] border border-[#ECECEC] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                      Local Holiday Region
+                    </div>
+                    <div className="text-[11.5px] text-[#737373] mt-0.5">
+                      Detected from your device timezone. Switch country/region anytime.
+                    </div>
+                  </div>
+                  <select
+                    value={holidayRegion}
+                    onChange={(e) => onSetHolidayRegion(e.target.value as HolidayRegionCode)}
+                    className="bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1] shrink-0"
+                  >
+                    {HOLIDAY_REGIONS.map((reg) => (
+                      <option key={reg.code} value={reg.code}>
+                        {reg.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* ONLY Holidays & Indian Festivals */}
                 <div className="divide-y divide-[#F2F2F2]">
-                  {culturalLayers.map((layer) => {
-                    const theme = COLOR_THEMES[layer.color];
+                  {holidayAndIndianLayers.map((layer) => {
+                    const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.crimson;
                     return (
                       <div
                         key={layer.id}
@@ -357,7 +553,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           />
                           <div className="min-w-0">
                             <div className="text-[13px] font-medium text-[#1A1A1A]">
-                              {layer.name}
+                              {layer.id === 'national-holidays'
+                                ? `Local Holidays (${getRegionLabel(holidayRegion)})`
+                                : layer.name}
                             </div>
                             {layer.description && (
                               <div className="text-[11.5px] text-[#7A7A7A] mt-0.5 leading-snug">
@@ -375,36 +573,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     );
                   })}
-
-                  {/* Gujarati Script Toggle */}
-                  <div className="py-3 flex items-center justify-between gap-4">
-                    <div>
-                      <div className="text-[13px] font-medium text-[#1A1A1A]">
-                        Gujarati Script Labels (<span className="font-gujarati">ગુજરાતી</span>)
-                      </div>
-                      <div className="text-[11.5px] text-[#7A7A7A] mt-0.5">
-                        Display Gujarati Tithis and festival titles in native Gujarati script instead of English transliteration.
-                      </div>
-                    </div>
-                    <ToggleSwitch
-                      checked={gujaratiScript}
-                      onChange={onToggleGujaratiScript}
-                      label="Toggle Gujarati script labels"
-                    />
-                  </div>
                 </div>
 
-                {/* Local Personal Category Visibility */}
+                {/* Local Personal & Custom Calendar Categories */}
                 <div className="pt-4 border-t border-[#EFEFEF] space-y-2">
                   <h4 className="text-[12.5px] font-semibold text-[#1A1A1A]">
-                    Local Calendar Categories
+                    My Local Calendars ({localLayers.length})
                   </h4>
                   <p className="text-[11.5px] text-[#7A7A7A]">
-                    Show or hide local personal categories for events, birthdays, memorials, and workspace plans.
+                    Stored privately on this device. Enable any personal category when you need it.
                   </p>
                   <div className="divide-y divide-[#F2F2F2]">
                     {localLayers.map((layer) => {
-                      const theme = COLOR_THEMES[layer.color];
+                      const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.blue;
                       return (
                         <div
                           key={layer.id}
@@ -432,13 +613,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ==================== TAB 2: 29 WORLD CALENDARS ==================== */}
+            {/* ==================== TAB 2: WORLD CALENDARS ==================== */}
             {tab === 'world' && (
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF]">
                   <div>
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      Unified Calendar Systems ({enabledWorldCalendars.length} / {WORLD_CALENDAR_SYSTEMS.length} active)
+                      World Calendars ({enabledWorldCalendars.length} / {WORLD_CALENDAR_SYSTEMS.length} active)
                     </h3>
                     <p className="text-[12px] text-[#737373] mt-0.5">
                       Live conversion for{' '}
@@ -446,7 +627,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         {MONTH_NAMES[anchorDate.getMonth()]} {anchorDate.getDate()},{' '}
                         {anchorDate.getFullYear()}
                       </span>
-                      . Enabled calendars appear in the Left Sidebar, Calendar Canvas, and Almanac.
+                      . Includes Gujarati Calendar &amp; Tithis and World Calendar Festivals.
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -462,27 +643,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClick={() => onEnableAllWorldCalendars(false)}
                       className="px-2 py-1 rounded border border-[#E2E2E2] text-[11px] font-medium text-[#4A4A4A] hover:bg-[#F5F5F5] cursor-pointer"
                     >
-                      Hide all
+                      Clear all
                     </button>
                   </div>
                 </div>
 
-                {/* Primary & Sub-header Calendar Selectors */}
+                {/* World Calendar Festival & Tithi Overlays */}
+                <div className="border border-[#ECECEC] rounded-lg divide-y divide-[#F2F2F2] bg-[#FAFAFA] px-3">
+                  {worldOverlayLayers.map((layer) => {
+                    const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.teal;
+                    return (
+                      <div
+                        key={layer.id}
+                        className="py-2.5 flex items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <span
+                            className="w-3 h-3 rounded-[3px] mt-1 shrink-0"
+                            style={{ backgroundColor: theme.dot }}
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[12.5px] font-medium text-[#1A1A1A]">
+                              {layer.name}
+                            </div>
+                            {layer.description && (
+                              <div className="text-[11px] text-[#737373] leading-snug">
+                                {layer.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <ToggleSwitch
+                          checked={layer.visible}
+                          onChange={() => onToggleLayer(layer.id)}
+                          label={`Toggle ${layer.name}`}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  <div className="py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[12.5px] font-medium text-[#1A1A1A]">
+                        Gujarati Script (<span className="font-gujarati">ગુજરાતી</span>)
+                      </div>
+                      <div className="text-[11px] text-[#737373]">
+                        Show Gujarati Vikram Samvat Tithis in native Gujarati script.
+                      </div>
+                    </div>
+                    <ToggleSwitch
+                      checked={gujaratiScript}
+                      onChange={onToggleGujaratiScript}
+                      label="Toggle Gujarati script labels"
+                    />
+                  </div>
+                </div>
+
+                {/* Primary & Sub-header Calendar Selectors (BOTH WIRED!) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#FAFAFA] border border-[#ECECEC] rounded-lg p-3">
                   <div>
                     <div className="text-[12.5px] font-medium text-[#1A1A1A]">
                       Primary calendar system
                     </div>
                     <div className="text-[11px] text-[#7A7A7A] mb-1.5">
-                      Determines primary date display format.
+                      Reference calendar used for date conversions.
                     </div>
                     <select
-                      value="gregorian"
-                      onChange={() => {}}
+                      value={primaryCalendar}
+                      onChange={(e) =>
+                        onSetPrimaryCalendar(e.target.value as WorldCalendarSystemId)
+                      }
                       className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
                     >
                       <option value="gregorian">Gregorian (Standard International)</option>
-                      {WORLD_CALENDAR_SYSTEMS.map((sys) => (
+                      {WORLD_CALENDAR_SYSTEMS.filter((s) => s.id !== 'gregorian').map((sys) => (
                         <option key={sys.id} value={sys.id}>
                           {sys.name}
                         </option>
@@ -495,7 +729,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Day column sub-header calendar
                     </div>
                     <div className="text-[11px] text-[#7A7A7A] mb-1.5">
-                      Secondary label beneath dates on calendar grid.
+                      Optional secondary date shown on calendar headers.
                     </div>
                     <select
                       value={headerSubCalendar}
@@ -506,7 +740,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }
                       className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
                     >
-                      <option value="none">None (Gregorian only)</option>
+                      <option value="none">None (Clean Gregorian only)</option>
                       {WORLD_CALENDAR_SYSTEMS.map((sys) => (
                         <option key={sys.id} value={sys.id}>
                           {sys.name}
@@ -521,18 +755,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="text"
                   value={worldFilter}
                   onChange={(e) => setWorldFilter(e.target.value)}
-                  placeholder="Filter 32 calendar systems (e.g. ISO Week, Academic, Fiscal, Tamil, Hebrew, Islamic, Chinese...)"
+                  placeholder={`Filter all ${WORLD_CALENDAR_SYSTEMS.length} world calendars (e.g. Gujarati, Islamic, Hebrew, Chinese, ISO Week...)`}
                   className="w-full bg-white border border-[#E2E2E2] rounded-md px-3 py-1.5 text-[12.5px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#3B9AE1]"
                 />
 
-                {/* Grouped World Calendar Toggles with Live Date Conversion */}
+                {/* Grouped World Calendar Toggles */}
                 {WORLD_CALENDAR_GROUPS.map((grp) => {
                   const items = worldConversions.filter((c) => c.meta.group === grp.id);
                   if (items.length === 0) return null;
                   return (
                     <div key={grp.id} className="space-y-1.5">
                       <h4 className="text-[11.5px] font-semibold text-[#737373] pt-1">
-                        {grp.label}
+                        {grp.label} ({items.length})
                       </h4>
                       <div className="divide-y divide-[#F2F2F2] border border-[#EFEFEF] rounded-lg px-3">
                         {items.map(({ meta, val }) => (
@@ -578,10 +812,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   );
                 })}
 
-                {/* Master Reference Links */}
                 <div className="pt-3 border-t border-[#EFEFEF]">
                   <div className="text-[11.5px] font-semibold text-[#737373] mb-2">
-                    Reference Almanac &amp; Converter Links
+                    Reference Links
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px]">
                     {MASTER_REFERENCE_LINKS.map((link) => (
@@ -601,135 +834,377 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ==================== TAB: LANGUAGE & LOCALE ==================== */}
-            {tab === 'language' && (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF]">
-                  <div>
+            {/* ==================== TAB 3: DISPLAY, TIMEZONES & WEATHER ==================== */}
+            {tab === 'display' && (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="pb-3 border-b border-[#EFEFEF]">
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      Language &amp; Regional Localization
+                      Dual Timezone Columns
                     </h3>
                     <p className="text-[12px] text-[#737373] mt-0.5">
-                      Choose your preferred interface and cultural calendar language.
+                      Primary timezone defaults automatically to your current device location.
                     </p>
                   </div>
-                  <span className="text-[11px] font-medium text-[#185D8F] bg-[#EFF8FF] border border-[#B2DDFF] px-2.5 py-0.5 rounded-full shrink-0">
-                    {SUPPORTED_LANGUAGES.find((l) => l.code === (selectedLanguage || 'en'))?.nativeName || 'English'}
-                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
+                        Primary timezone (local)
+                      </label>
+                      <select
+                        value={primaryTz.id}
+                        onChange={(e) => {
+                          const found = allTimezoneOptions.find(
+                            (t) => t.id === e.target.value
+                          );
+                          if (found) onSetPrimaryTz(found);
+                        }}
+                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                      >
+                        {allTimezoneOptions.map((tz) => (
+                          <option key={tz.id} value={tz.id}>
+                            {tz.abbr} — {tz.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
+                        Secondary timezone (comparison)
+                      </label>
+                      <select
+                        value={secondaryTz.id}
+                        onChange={(e) => {
+                          const found = allTimezoneOptions.find(
+                            (t) => t.id === e.target.value
+                          );
+                          if (found) onSetSecondaryTz(found);
+                        }}
+                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                      >
+                        {allTimezoneOptions.map((tz) => (
+                          <option key={tz.id} value={tz.id}>
+                            {tz.abbr} — {tz.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Quick select pills */}
-                <div>
-                  <div className="text-[11px] font-semibold text-[#737373] mb-1.5 uppercase tracking-wider">
-                    Popular Languages
+                {/* Weather Location & Units */}
+                <div className="space-y-3 pt-4 border-t border-[#EFEFEF]">
+                  <div className="flex items-center gap-2">
+                    <CloudSun className="w-4 h-4 text-[#D98E04]" />
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                      Weather Forecast Location
+                    </h3>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {SUPPORTED_LANGUAGES.slice(0, 8).map((lang) => {
-                      const isSelected = (selectedLanguage || 'en') === lang.code;
-                      return (
+                  <p className="text-[12px] text-[#737373]">
+                    Set your city or use browser geolocation for the Weather &amp; Time panel.
+                  </p>
+
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (cityDraft.trim()) {
+                        onSetWeatherLocationQuery(cityDraft.trim());
+                        showToast?.(`Weather location updated to ${cityDraft.trim()}`);
+                      }
+                    }}
+                    className="flex flex-col sm:flex-row gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={cityDraft}
+                      onChange={(e) => setCityDraft(e.target.value)}
+                      placeholder="City or region (e.g. London, New York, Mumbai)"
+                      className="flex-1 bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!cityDraft.trim()}
+                      className="px-4 py-2 rounded-md bg-[#1A1A1A] hover:bg-[#333333] disabled:opacity-40 text-white text-[12.5px] font-medium cursor-pointer shrink-0"
+                    >
+                      Update location
+                    </button>
+                  </form>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={onUseWeatherGeolocation}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#1A1A1A] cursor-pointer"
+                    >
+                      <LocateFixed className="w-3.5 h-3.5 text-[#185D8F]" />
+                      <span>Use my current GPS location</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] text-[#666666]">Temperature unit:</span>
+                      <div className="inline-flex rounded-md border border-[#DCDCDC] overflow-hidden text-[12px] font-medium">
                         <button
-                          key={lang.code}
                           type="button"
-                          onClick={() => onSelectLanguage?.(lang.code)}
-                          className={`px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isSelected
-                              ? 'bg-[#1A1A1A] text-white shadow-xs'
-                              : 'bg-[#F2F4F7] text-[#344054] hover:bg-[#EAECF0]'
+                          onClick={() => onSetWeatherUnits('METRIC')}
+                          className={`px-3 py-1 cursor-pointer ${
+                            weatherUnits === 'METRIC'
+                              ? 'bg-[#1A1A1A] text-white'
+                              : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
                           }`}
                         >
-                          <span className="font-mono text-[10px] font-bold opacity-75">{lang.flag}</span>
-                          <span>{lang.nativeName}</span>
-                          <span className="text-[10px] opacity-60">({lang.name})</span>
+                          °C
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Search / Filter input */}
-                <div className="pt-2">
-                  <input
-                    type="text"
-                    placeholder="Search all 21 supported languages by name, native script, or region..."
-                    value={langFilter}
-                    onChange={(e) => setLangFilter(e.target.value)}
-                    className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#185D8F]"
-                  />
-                </div>
-
-                {/* Full Language Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[320px] overflow-y-auto cal-scroll pr-1">
-                  {SUPPORTED_LANGUAGES.filter(
-                    (l) =>
-                      !langFilter ||
-                      l.name.toLowerCase().includes(langFilter.toLowerCase()) ||
-                      l.nativeName.toLowerCase().includes(langFilter.toLowerCase()) ||
-                      l.region.toLowerCase().includes(langFilter.toLowerCase()) ||
-                      l.code.toLowerCase().includes(langFilter.toLowerCase())
-                  ).map((lang) => {
-                    const isSelected = (selectedLanguage || 'en') === lang.code;
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => onSelectLanguage?.(lang.code)}
-                        className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                          isSelected
-                            ? 'bg-[#F0F9FF] border-[#0284C7] shadow-2xs'
-                            : 'bg-white border-[#E5E7EB] hover:border-[#D1D5DB] hover:bg-[#F9FAFB]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="w-7 h-7 rounded-md bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center font-bold text-[10.5px] text-[#374151] shrink-0 font-mono">
-                            {lang.flag}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="text-[12.5px] font-semibold text-[#111827] leading-tight truncate">
-                              {lang.nativeName}{' '}
-                              <span className="text-[11px] font-normal text-[#6B7280]">
-                                ({lang.name})
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-[#6B7280] truncate mt-0.5">
-                              {lang.region}
-                            </div>
-                          </div>
-                        </div>
-
-                        {isSelected ? (
-                          <span className="w-5 h-5 rounded-full bg-[#0284C7] text-white flex items-center justify-center shrink-0">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-[#9CA3AF] shrink-0 font-mono">
-                            {lang.code.toUpperCase()}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Cultural Script Quick Toggle */}
-                <div className="pt-3 border-t border-[#EFEFEF] flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[12.5px] font-medium text-[#1A1A1A]">
-                      Gujarati Script Labels (<span className="font-gujarati">ગુજરાતી</span>)
-                    </div>
-                    <div className="text-[11px] text-[#7A7A7A] mt-0.5">
-                      Display Panchang Tithis and festival headers in native Gujarati script.
+                        <button
+                          type="button"
+                          onClick={() => onSetWeatherUnits('IMPERIAL')}
+                          className={`px-3 py-1 cursor-pointer ${
+                            weatherUnits === 'IMPERIAL'
+                              ? 'bg-[#1A1A1A] text-white'
+                              : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                          }`}
+                        >
+                          °F
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <ToggleSwitch
-                    checked={gujaratiScript}
-                    onChange={onToggleGujaratiScript}
-                    label="Toggle Gujarati script labels"
-                  />
                 </div>
               </div>
             )}
 
-            {/* ==================== TAB 3: GOOGLE CALENDAR ==================== */}
+            {/* ==================== TAB 4: CALENDAR DATA SYNC (.ICS) ==================== */}
+            {tab === 'sync' && (
+              <div className="space-y-6">
+                <div className="pb-3 border-b border-[#EFEFEF]">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                    Calendar Data Synchronization (.ics)
+                  </h3>
+                  <p className="text-[12px] text-[#737373] mt-0.5">
+                    Export your schedule to an industry-standard iCalendar (.ics) file or import events from Apple Calendar, Outlook, or Google Calendar.
+                  </p>
+                </div>
+
+                {/* Export Section */}
+                <div className="p-4 rounded-xl border border-[#EAEAEA] bg-[#FAFAFA] space-y-3.5">
+                  <div className="flex items-center gap-2">
+                    <Download className="w-4 h-4 text-[#1A1A1A]" />
+                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">
+                      Export to .ics File
+                    </h4>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {layers
+                      .filter((l) => l.type === 'personal' || l.type === 'custom' || l.type === 'google')
+                      .map((layer) => {
+                        const checked = selectedExportLayers.has(layer.id);
+                        const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.blue;
+                        return (
+                          <button
+                            key={layer.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedExportLayers((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(layer.id)) next.delete(layer.id);
+                                else next.add(layer.id);
+                                return next;
+                              });
+                            }}
+                            className={`px-2.5 py-1 rounded-md border text-[11.5px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                              checked
+                                ? 'bg-white border-[#1A1A1A] text-[#1A1A1A]'
+                                : 'bg-transparent border-[#DCDCDC] text-[#737373]'
+                            }`}
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-xs shrink-0"
+                              style={{ backgroundColor: layer.customHex || theme.dot }}
+                            />
+                            <span>{layer.name}</span>
+                          </button>
+                        );
+                      })}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <span className="text-[11.5px] text-[#666666] tabular-nums">
+                      {eventsToExport.length} event{eventsToExport.length === 1 ? '' : 's'} ready to export
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleDownloadIcs}
+                      className="px-4 py-2 rounded-lg bg-[#1A1A1A] hover:bg-[#333333] text-white text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer"
+                    >
+                      {exportSuccess ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Downloaded .ics</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download .ics File</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Import Section */}
+                <div className="p-4 rounded-xl border border-[#EAEAEA] bg-white space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-[#1A1A1A]" />
+                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">
+                      Import .ics Calendar File
+                    </h4>
+                  </div>
+                  <p className="text-[12px] text-[#737373]">
+                    Imported events are saved locally on this device inside your Personal Events calendar.
+                  </p>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".ics,text/calendar"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full py-6 border border-dashed border-[#D0D0D0] hover:border-[#1A1A1A] hover:bg-[#FAFAFA] rounded-lg flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <FileText className="w-5 h-5 text-[#737373]" />
+                    <span className="text-[12.5px] font-medium text-[#1A1A1A]">
+                      Click to choose a .ics file from your device
+                    </span>
+                    <span className="text-[11px] text-[#8C8C8C]">
+                      Supports Apple Calendar, Google Calendar &amp; Outlook exports
+                    </span>
+                  </button>
+
+                  {importStatus && (
+                    <div
+                      className={`p-2.5 rounded-lg text-[12px] flex items-center gap-2 ${
+                        importStatus.type === 'success'
+                          ? 'bg-[#E6F4EA] text-[#1E7E34] border border-[#B7DFC2]'
+                          : 'bg-[#FDE2E4] text-[#8A1520] border border-[#F5B7BC]'
+                      }`}
+                    >
+                      {importStatus.type === 'success' ? (
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                      )}
+                      <span>{importStatus.message}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ==================== TAB 5: KEYBOARD SHORTCUTS ==================== */}
+            {tab === 'shortcuts' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF]">
+                  <div>
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                      Keyboard Shortcuts
+                    </h3>
+                    <p className="text-[12px] text-[#737373] mt-0.5">
+                      Navigate dates, switch views, and create events without leaving your keyboard.
+                    </p>
+                  </div>
+
+                  <div className="inline-flex rounded-md border border-[#DCDCDC] overflow-hidden text-[11.5px] font-medium">
+                    <button
+                      type="button"
+                      onClick={() => setShortcutOs('mac')}
+                      className={`px-2.5 py-1 cursor-pointer ${
+                        shortcutOs === 'mac'
+                          ? 'bg-[#1A1A1A] text-white'
+                          : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                      }`}
+                    >
+                      macOS
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShortcutOs('win')}
+                      className={`px-2.5 py-1 cursor-pointer ${
+                        shortcutOs === 'win'
+                          ? 'bg-[#1A1A1A] text-white'
+                          : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                      }`}
+                    >
+                      Windows
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#9A9A9A] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={shortcutFilter}
+                    onChange={(e) => setShortcutFilter(e.target.value)}
+                    placeholder="Filter shortcuts..."
+                    className="w-full bg-white border border-[#E2E2E2] rounded-md pl-8 pr-3 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  {SHORTCUT_CATEGORIES.map((cat) => {
+                    const filtered = cat.items.filter(
+                      (item) =>
+                        !shortcutFilter.trim() ||
+                        item.desc.toLowerCase().includes(shortcutFilter.toLowerCase()) ||
+                        item.keys.join(' ').toLowerCase().includes(shortcutFilter.toLowerCase())
+                    );
+                    if (filtered.length === 0) return null;
+                    return (
+                      <div key={cat.name} className="space-y-1.5">
+                        <h4 className="text-[11.5px] font-semibold text-[#737373]">
+                          {cat.name}
+                        </h4>
+                        <div className="border border-[#EFEFEF] rounded-lg divide-y divide-[#F4F4F4]">
+                          {filtered.map((item, idx) => (
+                            <div
+                              key={idx}
+                              className="px-3 py-2 flex items-center justify-between gap-3 text-[12.5px]"
+                            >
+                              <span className="text-[#262626]">{item.desc}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {item.keys.map((k, ki) =>
+                                  k === 'or' ? (
+                                    <span key={ki} className="text-[11px] text-[#9A9A9A] px-0.5">
+                                      or
+                                    </span>
+                                  ) : (
+                                    <kbd
+                                      key={ki}
+                                      className="px-1.5 py-0.5 text-[11px] font-mono font-medium bg-[#F5F5F5] border border-[#DFDFDF] rounded text-[#1A1A1A]"
+                                    >
+                                      {formatShortcutKey(k)}
+                                    </kbd>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ==================== TAB 6: GOOGLE CALENDAR ==================== */}
             {tab === 'google' && (
               <div className="space-y-4">
                 <div className="pb-3 border-b border-[#EFEFEF]">
@@ -737,7 +1212,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     Google Calendar Sync
                   </h3>
                   <p className="text-[12px] text-[#737373] mt-0.5 leading-relaxed">
-                    Connect your Google account to sync your real calendars and manage events, birthdays, memorials, and workspace plans directly from calendar.q.
+                    Connect Google Calendar to view or edit events with explicit confirmation before any change. Synced calendars stay unchecked until you enable them.
                   </p>
                 </div>
 
@@ -750,7 +1225,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {!googleUser ? (
                   <div className="rounded-lg border border-[#EAEAEA] bg-[#FAFAFA] p-4 space-y-3">
                     <div className="text-[12.5px] text-[#454545] leading-relaxed">
-                      Sign in with Google to import your calendar lists (Work, Personal, Birthdays, Family, Plans) and add or update events with explicit confirmation before any change.
+                      Sign in with Google to link your calendars while keeping your local holiday view clean.
                     </div>
                     <div className="max-w-[260px]">
                       <GoogleSignInButton
@@ -792,11 +1267,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           disabled={googleSyncing}
                           className="px-2.5 py-1.5 rounded-md border border-[#DCDCDC] bg-white hover:bg-[#F3F3F3] text-[12px] font-medium text-[#1A1A1A] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
-                          <RefreshCw
-                            className={`w-3.5 h-3.5 ${
-                              googleSyncing ? 'animate-spin' : ''
-                            }`}
-                          />
+                          <RefreshCw className={`w-3.5 h-3.5 ${googleSyncing ? 'animate-spin' : ''}`} />
                           <span>{googleSyncing ? 'Syncing' : 'Sync now'}</span>
                         </button>
                         <button
@@ -821,7 +1292,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <div className="divide-y divide-[#F2F2F2] border border-[#EFEFEF] rounded-lg px-3">
                           {googleLayers.map((cal) => {
-                            const theme = COLOR_THEMES[cal.color];
+                            const theme = COLOR_THEMES[cal.color] || COLOR_THEMES.blue;
                             return (
                               <div
                                 key={cal.id}
@@ -830,9 +1301,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 <div className="flex items-center gap-2.5 min-w-0">
                                   <span
                                     className="w-3 h-3 rounded-[3px] shrink-0"
-                                    style={{
-                                      backgroundColor: cal.customHex || theme.dot,
-                                    }}
+                                    style={{ backgroundColor: cal.customHex || theme.dot }}
                                   />
                                   <span className="text-[12.5px] font-medium text-[#1A1A1A] truncate">
                                     {cal.name}
@@ -854,142 +1323,116 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ==================== TAB 4: DISPLAY, TIMEZONES & WEATHER ==================== */}
-            {tab === 'display' && (
-              <div className="space-y-6">
-                <div className="space-y-4">
-                  <div className="pb-3 border-b border-[#EFEFEF]">
+            {/* ==================== TAB 7: LANGUAGE ==================== */}
+            {tab === 'language' && (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF]">
+                  <div>
                     <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      Dual Timezone Columns
+                      Language &amp; Localization
                     </h3>
                     <p className="text-[12px] text-[#737373] mt-0.5">
-                      Configure the two timezone rails displayed along the left edge of the schedule grid.
+                      Choose your preferred interface language.
                     </p>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
-                        Primary timezone (right gutter)
-                      </label>
-                      <select
-                        value={primaryTz.id}
-                        onChange={(e) => {
-                          const found = TIMEZONE_OPTIONS.find(
-                            (t) => t.id === e.target.value
-                          );
-                          if (found) onSetPrimaryTz(found);
-                        }}
-                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
-                      >
-                        {TIMEZONE_OPTIONS.map((tz) => (
-                          <option key={tz.id} value={tz.id}>
-                            {tz.abbr} — {tz.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
-                        Secondary timezone (left gutter)
-                      </label>
-                      <select
-                        value={secondaryTz.id}
-                        onChange={(e) => {
-                          const found = TIMEZONE_OPTIONS.find(
-                            (t) => t.id === e.target.value
-                          );
-                          if (found) onSetSecondaryTz(found);
-                        }}
-                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
-                      >
-                        {TIMEZONE_OPTIONS.map((tz) => (
-                          <option key={tz.id} value={tz.id}>
-                            {tz.abbr} — {tz.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                  <span className="text-[11.5px] font-medium text-[#185D8F] shrink-0">
+                    {SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage)?.nativeName || 'English'}
+                  </span>
                 </div>
 
-                {/* Weather Location & Units */}
-                <div className="space-y-3 pt-4 border-t border-[#EFEFEF]">
-                  <div className="flex items-center gap-2">
-                    <CloudSun className="w-4 h-4 text-[#D98E04]" />
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
-                      Weather Forecast Location
-                    </h3>
-                  </div>
-                  <p className="text-[12px] text-[#737373]">
-                    Set the primary city used by the header weather widget and 5-day planning forecast.
+                <input
+                  type="text"
+                  placeholder="Search supported languages..."
+                  value={langFilter}
+                  onChange={(e) => setLangFilter(e.target.value)}
+                  className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#185D8F]"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[340px] overflow-y-auto cal-scroll pr-1">
+                  {SUPPORTED_LANGUAGES.filter(
+                    (l) =>
+                      !langFilter ||
+                      l.name.toLowerCase().includes(langFilter.toLowerCase()) ||
+                      l.nativeName.toLowerCase().includes(langFilter.toLowerCase()) ||
+                      l.region.toLowerCase().includes(langFilter.toLowerCase())
+                  ).map((lang) => {
+                    const isSelected = selectedLanguage === lang.code;
+                    return (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => onSelectLanguage?.(lang.code)}
+                        className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                          isSelected
+                            ? 'bg-[#F0F9FF] border-[#0284C7]'
+                            : 'bg-white border-[#E5E7EB] hover:bg-[#F9FAFB]'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="text-[12.5px] font-semibold text-[#111827] truncate">
+                            {lang.nativeName}{' '}
+                            <span className="text-[11px] font-normal text-[#6B7280]">
+                              ({lang.name})
+                            </span>
+                          </div>
+                          <div className="text-[10.5px] text-[#6B7280] truncate">
+                            {lang.region}
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-[#0284C7] shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ==================== TAB 8: APPS & WIDGETS ==================== */}
+            {tab === 'apps' && (
+              <div className="space-y-4">
+                <div className="pb-3 border-b border-[#EFEFEF]">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                    Desktop &amp; Mobile Apps + Widgets
+                  </h3>
+                  <p className="text-[12px] text-[#737373] mt-0.5">
+                    Install calendar.q directly on your Mac, Windows PC, Linux desktop, iPhone, or Android phone, and launch standalone desktop or mobile widgets.
                   </p>
+                </div>
 
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (cityDraft.trim()) {
-                        onSetWeatherLocationQuery(cityDraft.trim());
-                      }
-                    }}
-                    className="flex flex-col sm:flex-row gap-2"
-                  >
-                    <input
-                      type="text"
-                      value={cityDraft}
-                      onChange={(e) => setCityDraft(e.target.value)}
-                      placeholder="City or region (e.g. Ahmedabad, India)"
-                      className="flex-1 bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!cityDraft.trim()}
-                      className="px-4 py-2 rounded-md bg-[#1A1A1A] hover:bg-[#333333] disabled:opacity-40 text-white text-[12.5px] font-medium cursor-pointer shrink-0"
-                    >
-                      Update location
-                    </button>
-                  </form>
-
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <button
-                      type="button"
-                      onClick={onUseWeatherGeolocation}
-                      className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#185D8F] hover:underline cursor-pointer"
-                    >
-                      <LocateFixed className="w-3.5 h-3.5" />
-                      <span>Use browser location</span>
-                    </button>
-
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] text-[#666666]">Temperature unit:</span>
-                      <div className="inline-flex rounded-md border border-[#DCDCDC] bg-white overflow-hidden text-[12px] font-medium">
-                        <button
-                          type="button"
-                          onClick={() => onSetWeatherUnits('METRIC')}
-                          className={`px-2.5 py-1 cursor-pointer transition-colors ${
-                            weatherUnits === 'METRIC'
-                              ? 'bg-[#1A1A1A] text-white'
-                              : 'text-[#525252] hover:bg-[#F3F3F3]'
-                          }`}
-                        >
-                          Celsius (°C)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onSetWeatherUnits('IMPERIAL')}
-                          className={`px-2.5 py-1 cursor-pointer transition-colors ${
-                            weatherUnits === 'IMPERIAL'
-                              ? 'bg-[#1A1A1A] text-white'
-                              : 'text-[#525252] hover:bg-[#F3F3F3]'
-                          }`}
-                        >
-                          Fahrenheit (°F)
-                        </button>
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-4 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] space-y-2">
+                    <Monitor className="w-5 h-5 text-[#1A1A1A]" />
+                    <div className="text-[13px] font-semibold text-[#1A1A1A]">
+                      Desktop App &amp; Widget
                     </div>
+                    <p className="text-[11.5px] text-[#666666] leading-relaxed">
+                      Native PWA window, OS app launchers (macOS, Windows, Linux), and a standalone live desktop widget.
+                    </p>
+                  </div>
+                  <div className="p-4 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] space-y-2">
+                    <Smartphone className="w-5 h-5 text-[#1A1A1A]" />
+                    <div className="text-[13px] font-semibold text-[#1A1A1A]">
+                      Mobile App &amp; Home Widget
+                    </div>
+                    <p className="text-[11.5px] text-[#666666] leading-relaxed">
+                      Installable offline-ready iOS &amp; Android app with compact 2×2, 4×2, and 4×4 live mobile widgets.
+                    </p>
                   </div>
                 </div>
+
+                {onOpenDownloadHub && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenDownloadHub();
+                    }}
+                    className="px-4 py-2.5 rounded-lg bg-[#1A1A1A] hover:bg-[#333333] text-white text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Open Device Download &amp; Widget Hub</span>
+                  </button>
+                )}
               </div>
             )}
           </div>

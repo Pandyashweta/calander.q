@@ -4,14 +4,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Eye,
-  EyeOff,
-  HelpCircle,
+  Home,
+  Moon,
   PanelLeft,
   PanelRight,
-  Search,
-  SlidersHorizontal,
-  User,
+  WifiOff,
 } from 'lucide-react';
 import {
   AvailabilitySlot,
@@ -27,6 +24,7 @@ import {
   WorldCalendarSystemId,
 } from './types/calendar';
 import { INITIAL_GROUPS, INITIAL_LAYERS, buildInitialEvents } from './data/initialData';
+import { getFestivalsForDate } from './data/festivalsAndDays';
 import { getGujaratiPanchang } from './data/gujaratiPanchang';
 import {
   DEFAULT_ENABLED_WORLD_CALENDARS,
@@ -55,6 +53,10 @@ import {
   isSameDay,
   parseDateKey,
 } from './utils/dateUtils';
+import {
+  HolidayRegionCode,
+  detectLocalHolidayRegion,
+} from './utils/deviceUtils';
 import { LeftSidebar } from './components/LeftSidebar';
 import { TimeGrid } from './components/TimeGrid';
 import { MonthView } from './components/MonthView';
@@ -62,13 +64,19 @@ import { RightPanel, RightSelection } from './components/RightPanel';
 import { ActiveModal, Modals } from './components/Modals';
 import { SettingsModal, SettingsTab } from './components/SettingsModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import { WeatherWidget } from './components/WeatherWidget';
+import { AstronomyModal } from './components/AstronomyModal';
+import { AppDownloadHub } from './components/AppDownloadHub';
+import { LandingPage } from './components/LandingPage';
+import { WidgetView } from './components/WidgetView';
 import { useViewport } from './hooks/useViewport';
-import { ExportModal } from './components/ExportModal';
-import { ShortcutsHelpModal } from './components/ShortcutsHelpModal';
-import { AuthModal } from './components/AuthModal';
+import { useOnlineStatus } from './hooks/usePWAInstall';
+import { AuthModal, AuthModalTab } from './components/AuthModal';
 import { LegalDocId, LegalModal } from './components/LegalModal';
-import { fetchCurrentAccount, getStoredUser } from './services/authClient';
+import {
+  fetchCurrentAccount,
+  getStoredUser,
+  oauthApi,
+} from './services/authClient';
 import {
   DailyForecastItem,
   ResolvedLocation,
@@ -80,9 +88,11 @@ import {
   reverseGeocodeCoords,
 } from './services/weatherService';
 
-const STORAGE_EVENTS_KEY = 'calendar_q_events_v2';
-const STORAGE_LAYERS_KEY = 'calendar_q_layers_v2';
-const STORAGE_PREFS_KEY = 'calendar_q_prefs_v2';
+const STORAGE_EVENTS_KEY = 'calendar_q_events_v3';
+const STORAGE_LAYERS_KEY = 'calendar_q_layers_v3';
+const STORAGE_PREFS_KEY = 'calendar_q_prefs_v3';
+
+type AppSurface = 'landing' | 'calendar' | 'widget-desktop' | 'widget-mobile';
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   day: 'Day',
@@ -92,7 +102,20 @@ const VIEW_LABELS: Record<ViewMode, string> = {
   month: 'Month',
 };
 
+function getInitialSurface(): AppSurface {
+  if (typeof window === 'undefined') return 'landing';
+  const params = new URLSearchParams(window.location.search);
+  const widget = params.get('widget');
+  if (widget === 'desktop') return 'widget-desktop';
+  if (widget === 'mobile') return 'widget-mobile';
+  if (params.get('open') === 'calendar') return 'calendar';
+  return 'landing';
+}
+
 export default function App() {
+  const [appSurface, setAppSurface] = useState<AppSurface>(getInitialSurface);
+  const isOnline = useOnlineStatus();
+
   const [today, setToday] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -105,9 +128,28 @@ export default function App() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
-  const [viewMode, setViewMode] = useState<ViewMode>('5days');
+
+  // Full Month is the clean default calendar view
+  const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [mobileViewOverride, setMobileViewOverride] = useState<ViewMode | null>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+
+  // Sync URL query cleanly when moving between surfaces
+  const navigateSurface = useCallback((next: AppSurface) => {
+    setAppSurface(next);
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('widget');
+      url.searchParams.delete('open');
+      if (next === 'widget-desktop') url.searchParams.set('widget', 'desktop');
+      else if (next === 'widget-mobile') url.searchParams.set('widget', 'mobile');
+      else if (next === 'calendar') url.searchParams.set('open', 'calendar');
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // ignore sandboxed history restrictions
+    }
+  }, []);
 
   // Automatic midnight detection & daylight saving update
   useEffect(() => {
@@ -144,23 +186,22 @@ export default function App() {
   );
   const [gmpQuotaExceeded, setGmpQuotaExceeded] = useState(false);
 
+  // Clean v3 layer initialization: ONLY local holidays ('national-holidays') is checked by default
   const [layers, setLayers] = useState<CalendarLayer[]>(() => {
     try {
-      const saved =
-        localStorage.getItem(STORAGE_LAYERS_KEY) ||
-        localStorage.getItem('calander_q_layers_v2') ||
-        localStorage.getItem('samay_calendar_layers_v2');
+      const saved = localStorage.getItem(STORAGE_LAYERS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const savedIds = new Set(parsed.map((l: CalendarLayer) => l.id));
+          const initialById = new Map(INITIAL_LAYERS.map((l) => [l.id, l]));
+          const normalized = parsed.map((l: CalendarLayer) => {
+            const base = initialById.get(l.id);
+            // Keep latest groupId/name organization from INITIAL_LAYERS while preserving visibility
+            return base ? { ...base, visible: Boolean(l.visible) } : l;
+          });
+          const savedIds = new Set(normalized.map((l: CalendarLayer) => l.id));
           const missingInitial = INITIAL_LAYERS.filter((l) => !savedIds.has(l.id));
-          return [...parsed, ...missingInitial];
-        } else if (typeof parsed === 'object' && parsed !== null) {
-          const map = parsed as Record<string, boolean>;
-          return INITIAL_LAYERS.map((l) =>
-            typeof map[l.id] === 'boolean' ? { ...l, visible: map[l.id] } : l
-          );
+          return [...normalized, ...missingInitial];
         }
       }
     } catch {
@@ -169,13 +210,12 @@ export default function App() {
     return INITIAL_LAYERS;
   });
 
-  // Local events (starts cleanly empty — zero fake sample events!)
+  // Local events stored exclusively on the user's device (starts cleanly empty)
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>(() => {
     try {
       const saved =
         localStorage.getItem(STORAGE_EVENTS_KEY) ||
-        localStorage.getItem('calander_q_events_v2') ||
-        localStorage.getItem('samay_calendar_events_v2');
+        localStorage.getItem('calendar_q_events_v2');
       if (saved) {
         const parsed = JSON.parse(saved) as CalendarEvent[];
         if (Array.isArray(parsed)) return parsed;
@@ -186,7 +226,7 @@ export default function App() {
     return buildInitialEvents();
   });
 
-  // Google Calendar real synced state (access token cached strictly in memory inside googleCalendar.ts)
+  // Google Calendar real synced state (access token strictly in memory inside googleCalendar.ts)
   const [googleUser, setGoogleUser] = useState<GoogleUserProfile | null>(null);
   const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
   const [googleSyncing, setGoogleSyncing] = useState(false);
@@ -194,6 +234,34 @@ export default function App() {
   const [pendingMutation, setPendingMutation] =
     useState<PendingGoogleMutation | null>(null);
   const [mutationBusy, setMutationBusy] = useState(false);
+
+  // Location-aware Holiday Region (auto-detected from browser timezone & locale)
+  const [holidayRegion, setHolidayRegion] = useState<HolidayRegionCode>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
+      if (saved) {
+        const reg = JSON.parse(saved).holidayRegion;
+        if (typeof reg === 'string' && reg.length >= 2) {
+          return reg as HolidayRegionCode;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return detectLocalHolidayRegion();
+  });
+
+  const [primaryCalendar, setPrimaryCalendar] = useState<WorldCalendarSystemId>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
+      if (saved && JSON.parse(saved).primaryCalendar) {
+        return JSON.parse(saved).primaryCalendar;
+      }
+    } catch {
+      // ignore
+    }
+    return 'gregorian';
+  });
 
   const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
     try {
@@ -224,16 +292,12 @@ export default function App() {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
       if (saved) {
         const arr = JSON.parse(saved).enabledWorldCalendars;
-        // Only restore saved selection if the user explicitly chose ≤ 3 calendars.
-        // If more than 3 are stored it means the old default-all behaviour populated
-        // them — reset to empty so the UI starts clean.
-        if (Array.isArray(arr) && arr.length <= 3) return arr;
-        if (Array.isArray(arr) && arr.length > 3) return [];
+        if (Array.isArray(arr)) return arr;
       }
     } catch {
       // ignore
     }
-    return DEFAULT_ENABLED_WORLD_CALENDARS; // now [] since all defaultEnabled: false
+    return DEFAULT_ENABLED_WORLD_CALENDARS;
   });
 
   const [headerSubCalendar, setHeaderSubCalendar] = useState<
@@ -247,16 +311,18 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'gujarati-vikram';
+    return 'none';
   });
 
   const [primaryTz, setPrimaryTz] = useState<TimezoneOption>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
       if (saved) {
-        const id = JSON.parse(saved).primaryTzId;
-        const found = TIMEZONE_OPTIONS.find((t) => t.id === id);
-        if (found) return found;
+        const parsed = JSON.parse(saved);
+        if (parsed.primaryTzId) {
+          const found = TIMEZONE_OPTIONS.find((t) => t.id === parsed.primaryTzId);
+          if (found) return found;
+        }
       }
     } catch {
       // ignore
@@ -275,10 +341,10 @@ export default function App() {
     } catch {
       // ignore
     }
-    return TIMEZONE_OPTIONS[2]; // PST
+    return TIMEZONE_OPTIONS.find((t) => t.id === 'UTC') || TIMEZONE_OPTIONS[0];
   });
 
-  // Weather preferences (primary calendar location query & units)
+  // Weather preferences (location-aware from local timezone unless customized)
   const [weatherUnits, setWeatherUnits] = useState<WeatherUnits>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
@@ -289,7 +355,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'METRIC';
+    return detectLocalHolidayRegion() === 'US' ? 'IMPERIAL' : 'METRIC';
   });
 
   const [customWeatherCity, setCustomWeatherCity] = useState<string | null>(() => {
@@ -322,11 +388,12 @@ export default function App() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('festivals');
+  const [astronomyOpen, setAstronomyOpen] = useState(false);
+  const [downloadHubOpen, setDownloadHubOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authInitialTab, setAuthInitialTab] = useState<AuthModalTab>('signin');
   const [legalModalOpen, setLegalModalOpen] = useState(false);
   const [legalInitialDoc, setLegalInitialDoc] = useState<LegalDocId>('privacy');
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => getStoredUser());
@@ -338,41 +405,74 @@ export default function App() {
   }, []);
 
   const viewMenuRef = useRef<HTMLDivElement>(null);
-  const meetInputRef = useRef<HTMLInputElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<number | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToastMsg(null), 2400);
+    toastTimerRef.current = window.setTimeout(() => setToastMsg(null), 2600);
   }, []);
 
-  const handleImportEvents = useCallback((imported: CalendarEvent[]) => {
-    setLocalEvents((prev) => [...prev, ...imported]);
-    showToast(`Successfully imported ${imported.length} events`);
-  }, [showToast]);
+  // Enforce clean post-login state: Full Month view + ONLY Local Holidays selected
+  const applyCleanSignedInWorkspace = useCallback(() => {
+    setViewMode('month');
+    setMobileViewOverride(null);
+    setLayers((prev) =>
+      prev.map((l) => ({
+        ...l,
+        visible: l.id === 'national-holidays',
+      }))
+    );
+    setEnabledWorldCalendars([]);
+    setHeaderSubCalendar('none');
+    setSelection({ kind: 'none' });
+    navigateSurface('calendar');
+  }, [navigateSurface]);
 
-  const handleSelectLanguage = useCallback((code: string) => {
-    setSelectedLanguage(code);
-    if (code === 'gu') {
-      setGujaratiScript(true);
-    }
-    showToast(`Language set to ${code.toUpperCase()}`);
-  }, [showToast]);
+  const handleUserAuthChange = useCallback(
+    (user: UserAccount | null, isFreshLogin?: boolean) => {
+      setCurrentUser(user);
+      if (user && isFreshLogin) {
+        applyCleanSignedInWorkspace();
+      }
+    },
+    [applyCleanSignedInWorkspace]
+  );
+
+  const handleImportEvents = useCallback(
+    (imported: CalendarEvent[]) => {
+      setLocalEvents((prev) => [...prev, ...imported]);
+      // Ensure personal layer is visible when user explicitly imports events
+      setLayers((prev) =>
+        prev.map((l) => (l.id === 'personal' ? { ...l, visible: true } : l))
+      );
+      showToast(`Imported ${imported.length} events to this device`);
+    },
+    [showToast]
+  );
+
+  const handleSelectLanguage = useCallback(
+    (code: string) => {
+      setSelectedLanguage(code);
+      if (code === 'gu') {
+        setGujaratiScript(true);
+      }
+      showToast(`Language set to ${code.toUpperCase()}`);
+    },
+    [showToast]
+  );
 
   const openSettings = useCallback((tab: SettingsTab = 'festivals') => {
     setSettingsTab(tab);
     setSettingsOpen(true);
   }, []);
 
-  // Combined events (local + synced Google Calendar events)
   const allEvents = useMemo(
     () => [...localEvents, ...googleEvents],
     [localEvents, googleEvents]
   );
 
-  // Persist local events, non-Google layer toggles, and preferences
+  // Persist local events, non-Google layer toggles, and preferences locally on device
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(localEvents));
@@ -395,6 +495,8 @@ export default function App() {
       localStorage.setItem(
         STORAGE_PREFS_KEY,
         JSON.stringify({
+          holidayRegion,
+          primaryCalendar,
           selectedLanguage,
           gujaratiScript,
           enabledWorldCalendars,
@@ -409,6 +511,8 @@ export default function App() {
       // ignore
     }
   }, [
+    holidayRegion,
+    primaryCalendar,
     selectedLanguage,
     gujaratiScript,
     enabledWorldCalendars,
@@ -419,7 +523,6 @@ export default function App() {
     customWeatherCity,
   ]);
 
-  // Listen for Google Maps Platform Demo Key quota exceeded events (Tier 1 & Tier 2)
   useEffect(() => {
     const onQuotaExceeded = () => setGmpQuotaExceeded(true);
     window.addEventListener('gmp-quota-exceeded', onQuotaExceeded);
@@ -446,7 +549,7 @@ export default function App() {
     }
   }, [viewport.width, mobileViewOverride]);
 
-  // Fetch live weather forecast from Google Maps Platform Weather API
+  // Fetch live weather forecast
   const loadWeather = useCallback(
     async (forceRefresh = false) => {
       setWeatherLoading(true);
@@ -531,9 +634,9 @@ export default function App() {
     return map;
   }, [weatherData]);
 
-  // Sync Google Calendar list + events around anchorDate
+  // Sync Google Calendar list + events around anchorDate (newly fetched layers start unchecked to keep sign-in clean)
   const syncGoogleCalendarData = useCallback(
-    async (explicitToken?: string, refDate?: Date) => {
+    async (explicitToken?: string, refDate?: Date, isFreshSignIn = false) => {
       const token = explicitToken || getAccessToken();
       if (!token) return;
       setGoogleSyncing(true);
@@ -541,15 +644,23 @@ export default function App() {
       try {
         const gLayers = await fetchGoogleCalendars(token);
         setLayers((prev) => {
-          const nonGoogle = prev.filter((l) => l.type !== 'google');
+          const nonGoogle = prev
+            .filter((l) => l.type !== 'google')
+            .map((l) =>
+              isFreshSignIn ? { ...l, visible: l.id === 'national-holidays' } : l
+            );
           const prevVis = new Map(
             prev.filter((l) => l.type === 'google').map((l) => [l.id, l.visible])
           );
           const mergedGoogle = gLayers.map((gl) => ({
             ...gl,
-            visible: prevVis.has(gl.id) ? Boolean(prevVis.get(gl.id)) : gl.visible,
+            visible: isFreshSignIn
+              ? false
+              : prevVis.has(gl.id)
+              ? Boolean(prevVis.get(gl.id))
+              : false,
           }));
-          return [...mergedGoogle, ...nonGoogle];
+          return [...nonGoogle, ...mergedGoogle];
         });
 
         const base = refDate || anchorDate;
@@ -560,12 +671,6 @@ export default function App() {
           .filter((id): id is string => Boolean(id));
         const fetched = await fetchGoogleEventsRange(token, calIds, timeMin, timeMax);
         setGoogleEvents(fetched);
-
-        // Set primary Google calendar as active default if user just signed in
-        const primaryCal = gLayers.find((l) => l.primary) || gLayers[0];
-        if (primaryCal && explicitToken) {
-          setActiveCalendarId(primaryCal.id);
-        }
       } catch (err: unknown) {
         const msg =
           err instanceof Error ? err.message : 'Failed to sync Google Calendar.';
@@ -582,7 +687,7 @@ export default function App() {
     const unsub = initAuth(
       (user, token) => {
         setGoogleUser(user);
-        void syncGoogleCalendarData(token);
+        void syncGoogleCalendarData(token, undefined, false);
       },
       () => {
         setGoogleUser(null);
@@ -598,7 +703,7 @@ export default function App() {
   useEffect(() => {
     const token = getAccessToken();
     if (googleUser && token) {
-      void syncGoogleCalendarData(token, anchorDate);
+      void syncGoogleCalendarData(token, anchorDate, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchorMonthKey]);
@@ -610,16 +715,31 @@ export default function App() {
       const res = await googleSignIn();
       if (res) {
         setGoogleUser(res.user);
-        await syncGoogleCalendarData(res.accessToken);
-        showToast(`Connected ${res.user.email || 'Google Calendar'}`);
+        // Save local profile record on this device so the account UI reflects the real Google profile
+        if (res.user.email) {
+          const localAuth = await oauthApi(
+            res.user.email,
+            res.user.displayName || res.user.email.split('@')[0],
+            'google',
+            res.user.photoURL || undefined
+          );
+          setCurrentUser(localAuth.user);
+        }
+        applyCleanSignedInWorkspace();
+        await syncGoogleCalendarData(res.accessToken, undefined, true);
+        setAuthModalOpen(false);
+        showToast(`Signed in as ${res.user.email || 'Google account'}`);
+      } else {
+        setGoogleSyncing(false);
       }
     } catch (err: unknown) {
       const msg =
         err instanceof Error ? err.message : 'Google sign-in was cancelled or failed.';
       setGoogleError(msg);
       setGoogleSyncing(false);
+      throw err;
     }
-  }, [syncGoogleCalendarData, showToast]);
+  }, [applyCleanSignedInWorkspace, syncGoogleCalendarData, showToast]);
 
   const handleGoogleLogout = useCallback(async () => {
     await logoutGoogle();
@@ -642,7 +762,6 @@ export default function App() {
     return () => window.removeEventListener('mousedown', onDown);
   }, [viewMenuOpen]);
 
-  // Gracefully adapt event grid columns on narrow mobile screens
   const effectiveViewMode: ViewMode = useMemo(() => {
     if (viewMode === 'month') return 'month';
     if (mobileViewOverride) return mobileViewOverride;
@@ -663,6 +782,11 @@ export default function App() {
   const visibleLayerIds = useMemo(
     () => new Set(layers.filter((l) => l.visible).map((l) => l.id)),
     [layers]
+  );
+
+  const anchorDayFestivals = useMemo(
+    () => getFestivalsForDate(anchorDate, visibleLayerIds, holidayRegion),
+    [anchorDate, visibleLayerIds, holidayRegion]
   );
 
   const showGujaratiCalendar = visibleLayerIds.has('gujarati-calendar');
@@ -702,6 +826,9 @@ export default function App() {
     } else if (headerSubCalendar !== 'none' && headerSubCalendar !== 'gujarati-vikram') {
       const val = convertToWorldCalendar(firstDay, headerSubCalendar, gujaratiScript);
       subCaption = `${val.name} · ${val.formatted}`;
+    } else if (primaryCalendar !== 'gregorian') {
+      const val = convertToWorldCalendar(firstDay, primaryCalendar, gujaratiScript);
+      subCaption = `${val.name} · ${val.formatted}`;
     }
 
     return {
@@ -714,6 +841,7 @@ export default function App() {
     effectiveViewMode,
     today,
     headerSubCalendar,
+    primaryCalendar,
     showGujaratiCalendar,
     gujaratiScript,
   ]);
@@ -763,15 +891,15 @@ export default function App() {
 
   const handleToggleAllCultural = useCallback(() => {
     setLayers((prev) => {
-      const anyOn = prev.some((l) => l.type === 'cultural' && l.visible);
+      const anyOn = prev.some(
+        (l) => l.groupId === 'holidays-festivals' && l.visible
+      );
       const nextVal = !anyOn;
       showToast(
-        nextVal
-          ? 'Showing festivals, holidays & Gujarati calendar'
-          : 'Hidden all festivals, holidays & Gujarati calendar'
+        nextVal ? 'Showing Holidays & Indian Festivals' : 'Hidden Holidays & Festivals'
       );
       return prev.map((l) =>
-        l.type === 'cultural' ? { ...l, visible: nextVal } : l
+        l.groupId === 'holidays-festivals' ? { ...l, visible: nextVal } : l
       );
     });
   }, [showToast]);
@@ -807,7 +935,7 @@ export default function App() {
     [showToast]
   );
 
-  // Local event creation (or draft creation targeting Google Calendar — requires confirmation when saving to Google!)
+  // Local event creation — auto-enables the target layer so the created event is immediately visible
   const handleCreateEventFromRange = useCallback(
     (dateKey: string, startMinutes: number, endMinutes: number, customTitle?: string) => {
       const targetLayer = layers.find((l) => l.id === activeCalendarId);
@@ -849,18 +977,22 @@ export default function App() {
     );
   }, [anchorDate, handleCreateEventFromRange]);
 
-  const handleQuickCreateMeeting = useCallback(
+  const handleQuickCreateEvent = useCallback(
     (title: string) => {
       const now = new Date();
       const startMins = Math.min(
         22 * 60,
         Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30
       );
-      handleCreateEventFromRange(formatDateKey(today), startMins, startMins + 30, title);
-      setAnchorDate(today);
+      handleCreateEventFromRange(
+        formatDateKey(anchorDate),
+        startMins,
+        startMins + 30,
+        title
+      );
       showToast(`Created "${title}"`);
     },
-    [today, handleCreateEventFromRange, showToast]
+    [anchorDate, handleCreateEventFromRange, showToast]
   );
 
   const handleUpdateLocalEvent = useCallback((updated: CalendarEvent) => {
@@ -895,7 +1027,6 @@ export default function App() {
         onConfirm: async () => {
           if (isNewOnGoogle || !event.googleEventId) {
             const created = await createGoogleEvent(token, gCalId, event);
-            // Remove local draft and insert real Google event
             setLocalEvents((prev) => prev.filter((e) => e.id !== event.id));
             setGoogleEvents((prev) => [...prev, created]);
             setSelection({ kind: 'event', eventId: created.id });
@@ -919,7 +1050,6 @@ export default function App() {
     [layers, openSettings, showToast]
   );
 
-  // Drag-move or resize on TimeGrid: local updates immediately; Google Calendar asks explicit confirmation first!
   const handleGridUpdateEvent = useCallback(
     (updated: CalendarEvent) => {
       if (updated.source === 'google') {
@@ -1024,6 +1154,22 @@ export default function App() {
     setAvailabilitySlots((prev) => prev.filter((s) => s.id !== slotId));
   }, []);
 
+  const handleCopyShareText = useCallback(() => {
+    if (availabilitySlots.length === 0) return;
+    const lines = availabilitySlots.map((slot) => {
+      const d = parseDateKey(slot.dateKey);
+      return `• ${MONTH_NAMES[d.getMonth()].slice(0, 3)} ${d.getDate()}: ${formatTimeRange(
+        slot.startMinutes,
+        slot.endMinutes
+      )} (${primaryTz.abbr})`;
+    });
+    const text = `My availability:\n${lines.join('\n')}`;
+    navigator.clipboard?.writeText(text).then(
+      () => showToast('Availability copied to clipboard'),
+      () => showToast('Ready to copy availability')
+    );
+  }, [availabilitySlots, primaryTz.abbr, showToast]);
+
   const handleJumpToFestival = useCallback((festival: FestivalItem) => {
     const d = parseDateKey(festival.date);
     setAnchorDate(d);
@@ -1038,8 +1184,10 @@ export default function App() {
     setRightOpen(true);
   }, []);
 
-  // Global keyboard shortcuts
+  // Global keyboard shortcuts (active in calendar workspace)
   useEffect(() => {
+    if (appSurface !== 'calendar') return;
+
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const isInput =
@@ -1058,7 +1206,7 @@ export default function App() {
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault();
-        setExportModalOpen((prev) => !prev);
+        openSettings('sync');
         return;
       }
 
@@ -1069,9 +1217,9 @@ export default function App() {
         return;
       }
 
-      if (e.key === '?') {
+      if (e.key === '?' && !isInput) {
         e.preventDefault();
-        setShortcutsModalOpen((prev) => !prev);
+        openSettings('shortcuts');
         return;
       }
 
@@ -1079,13 +1227,14 @@ export default function App() {
         isInput ||
         activeModal ||
         settingsOpen ||
+        astronomyOpen ||
+        downloadHubOpen ||
         pendingMutation ||
-        exportModalOpen ||
-        shortcutsModalOpen ||
         authModalOpen ||
         legalModalOpen
-      )
+      ) {
         return;
+      }
 
       const key = e.key.toLowerCase();
       if (key === 't') {
@@ -1100,25 +1249,20 @@ export default function App() {
       } else if (key === 'g') {
         e.preventDefault();
         handleToggleLayer('gujarati-calendar');
+      } else if (key === 'a') {
+        e.preventDefault();
+        setAstronomyOpen(true);
       } else if (key === 's') {
         e.preventDefault();
         setShareMode((v) => !v);
         setSelection({ kind: 'none' });
         setRightOpen(true);
-      } else if (key === 'f') {
-        e.preventDefault();
-        setRightOpen(true);
-        setSelection({ kind: 'none' });
-        setTimeout(() => meetInputRef.current?.focus(), 20);
       } else if (key === 'c') {
         e.preventDefault();
         handleCreateEventNow();
       } else if (key === '.') {
         e.preventDefault();
         setActiveModal('goto');
-      } else if (e.key === '?') {
-        e.preventDefault();
-        setActiveModal('shortcuts');
       } else if (key === '1') {
         setViewMode('day');
       } else if (key === '3') {
@@ -1148,11 +1292,12 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
+    appSurface,
     activeModal,
     settingsOpen,
+    astronomyOpen,
+    downloadHubOpen,
     pendingMutation,
-    exportModalOpen,
-    shortcutsModalOpen,
     authModalOpen,
     legalModalOpen,
     handleToday,
@@ -1174,9 +1319,93 @@ export default function App() {
     if (viewport.isDrawerMode) setLeftOpen(false);
   }, [viewport.isDrawerMode]);
 
+  const handleOpenAuth = useCallback(
+    (tab?: AuthModalTab) => {
+      setAuthInitialTab(tab || (currentUser ? 'profile' : 'signin'));
+      setAuthModalOpen(true);
+    },
+    [currentUser]
+  );
+
+  // ========= SURFACE 1: LIVE DESKTOP OR MOBILE WIDGET =========
+  if (appSurface === 'widget-desktop' || appSurface === 'widget-mobile') {
+    return (
+      <>
+        <WidgetView
+          mode={appSurface === 'widget-desktop' ? 'desktop' : 'mobile'}
+          events={allEvents}
+          weather={weatherData}
+          holidayRegion={holidayRegion}
+          onOpenCalendar={() => navigateSurface('calendar')}
+          onSwitchMode={(nextMode) =>
+            navigateSurface(nextMode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
+          }
+        />
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 2: LANDING PAGE =========
+  if (appSurface === 'landing') {
+    return (
+      <>
+        <LandingPage
+          today={today}
+          holidayRegion={holidayRegion}
+          currentUser={currentUser}
+          onOpenCalendar={() => navigateSurface('calendar')}
+          onOpenAuth={(tab) => handleOpenAuth(tab)}
+          onOpenDownloadHub={() => setDownloadHubOpen(true)}
+          onLaunchWidget={(mode) =>
+            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
+          }
+        />
+
+        <AuthModal
+          open={authModalOpen}
+          initialTab={authInitialTab}
+          currentUser={currentUser}
+          onClose={() => setAuthModalOpen(false)}
+          onUserChange={handleUserAuthChange}
+          onGoogleSignIn={handleGoogleSignIn}
+          googleSyncing={googleSyncing}
+          showToast={showToast}
+        />
+
+        <AppDownloadHub
+          open={downloadHubOpen}
+          onClose={() => setDownloadHubOpen(false)}
+          onLaunchWidget={(mode) => {
+            setDownloadHubOpen(false);
+            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile');
+          }}
+          showToast={showToast}
+        />
+
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 3: MAIN CALENDAR WORKSPACE =========
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-white text-[#1A1A1A]">
-      {/* Mandatory Demo Key Quota Banner (Google Maps Platform Case A) */}
+      {!isOnline && (
+        <div className="bg-[#1A1A1A] text-white px-4 py-1.5 text-[11.5px] flex items-center justify-center gap-2 shrink-0">
+          <WifiOff className="w-3.5 h-3.5" />
+          <span>Offline mode — your local calendar, holidays, and events remain available on this device.</span>
+        </div>
+      )}
+
       {gmpQuotaExceeded && (
         <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0">
           <span>
@@ -1217,6 +1446,7 @@ export default function App() {
             layers={layers}
             activeCalendarId={activeCalendarId}
             gujaratiScript={gujaratiScript}
+            holidayRegion={holidayRegion}
             enabledWorldCount={enabledWorldCalendars.length}
             enabledWorldCalendars={enabledWorldCalendars}
             onToggleWorldCalendar={handleToggleWorldCalendar}
@@ -1233,21 +1463,25 @@ export default function App() {
             onToggleAllCultural={handleToggleAllCultural}
             onToggleGujaratiScript={() => setGujaratiScript((v) => !v)}
             onCollapseSidebar={() => setLeftOpen(false)}
-            onGoogleSignIn={handleGoogleSignIn}
+            onGoogleSignIn={() => void handleGoogleSignIn()}
             onGoogleSync={() => void syncGoogleCalendarData()}
             onGoogleLogout={handleGoogleLogout}
             onOpenSettings={(tab) => {
               if (viewport.isDrawerMode) setLeftOpen(false);
               openSettings(tab);
             }}
+            onOpenDownloadHub={() => {
+              if (viewport.isDrawerMode) setLeftOpen(false);
+              setDownloadHubOpen(true);
+            }}
           />
         )}
 
         <main className="flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden">
-          {/* Top Bar (Exact Cron / Notion Calendar proportions, gracefully compact on mobile) */}
-          <header className="h-[52px] sm:h-[54px] px-3 sm:px-5 flex items-center justify-between gap-3 shrink-0 bg-white border-b border-[#EFEFEF]">
-            {/* Left: Navigation & Calendar Title */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {/* Clean Top Workspace Bar */}
+          <header className="h-[52px] sm:h-[54px] px-3 sm:px-5 flex items-center justify-between gap-2 sm:gap-3 shrink-0 bg-white border-b border-[#EFEFEF]">
+            {/* Left: Sidebar Toggle, Home, Today, Prev/Next, Month Title */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
               {(!leftOpen || viewport.isDrawerMode) && (
                 <button
                   type="button"
@@ -1260,7 +1494,16 @@ export default function App() {
                 </button>
               )}
 
-              {/* Today Button */}
+              <button
+                type="button"
+                onClick={() => navigateSurface('landing')}
+                title="Back to calendar.q overview"
+                aria-label="Back to overview"
+                className="p-1.5 rounded-md text-[#787878] hover:text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer shrink-0"
+              >
+                <Home className="w-3.5 h-3.5" />
+              </button>
+
               <button
                 type="button"
                 onClick={handleToday}
@@ -1269,7 +1512,6 @@ export default function App() {
                 Today
               </button>
 
-              {/* Prev / Next Chevrons */}
               <div className="flex items-center gap-0.5">
                 <button
                   type="button"
@@ -1289,12 +1531,10 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Title */}
               <h1 className="text-[18px] sm:text-[22px] font-bold tracking-[-0.025em] text-[#1A1A1A] leading-none whitespace-nowrap truncate ml-1 sm:ml-2">
                 {headerInfo.title}
               </h1>
 
-              {/* Secondary Calendar Subcaption */}
               {headerInfo.subCaption && (
                 <button
                   type="button"
@@ -1311,9 +1551,33 @@ export default function App() {
               )}
             </div>
 
-            {/* Right: View Switcher & Side Panel Toggle */}
+            {/* Right: Dedicated Astronomy Button, Apps & Widgets, View Switcher, Side Panel */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* View Switcher Dropdown ("5 days ▾" — shows adapted view on mobile) */}
+              {/* Separate Dedicated Astronomy Button (replaces cramped sidebar tab) */}
+              <button
+                type="button"
+                onClick={() => setAstronomyOpen(true)}
+                title="Astronomy, Moon Phase, Eclipses & Meteor Showers (A)"
+                aria-label="Open Astronomy Almanac"
+                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#3A3A3A] hover:text-[#1A1A1A] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+              >
+                <Moon className="w-3.5 h-3.5 text-[#525252]" />
+                <span className="hidden md:inline">Astronomy</span>
+              </button>
+
+              {/* Device-Aware Desktop & Mobile App / Widget Hub */}
+              <button
+                type="button"
+                onClick={() => setDownloadHubOpen(true)}
+                title="Download Desktop / Mobile App & Widgets"
+                aria-label="Apps and Widgets"
+                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#3A3A3A] hover:text-[#1A1A1A] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5 text-[#525252]" />
+                <span className="hidden lg:inline">Apps</span>
+              </button>
+
+              {/* View Switcher Dropdown (defaults to Month) */}
               <div ref={viewMenuRef} className="relative">
                 <button
                   type="button"
@@ -1328,11 +1592,11 @@ export default function App() {
                   <div className="absolute right-0 mt-1.5 w-[152px] bg-white border border-[#E4E4E4] rounded-lg shadow-lg py-1 z-40">
                     {(
                       [
-                        { id: 'day', label: 'Day', key: '1' },
-                        { id: '3days', label: '3 days', key: '3' },
-                        { id: '5days', label: '5 days', key: '5' },
-                        { id: 'week', label: 'Week', key: 'W' },
                         { id: 'month', label: 'Month', key: 'M' },
+                        { id: 'week', label: 'Week', key: 'W' },
+                        { id: '5days', label: '5 days', key: '5' },
+                        { id: '3days', label: '3 days', key: '3' },
+                        { id: 'day', label: 'Day', key: '1' },
                       ] as const
                     ).map((opt) => (
                       <button
@@ -1385,6 +1649,7 @@ export default function App() {
               headerSubCalendar={headerSubCalendar}
               enabledWorldCalendars={enabledWorldCalendars}
               gujaratiScript={gujaratiScript}
+              holidayRegion={holidayRegion}
               selectedEventId={selection.kind === 'event' ? selection.eventId : null}
               selectedFestivalId={
                 selection.kind === 'festival' ? selection.festival.id : null
@@ -1421,6 +1686,7 @@ export default function App() {
               headerSubCalendar={headerSubCalendar}
               enabledWorldCalendars={enabledWorldCalendars}
               gujaratiScript={gujaratiScript}
+              holidayRegion={holidayRegion}
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
               selectedEventId={selection.kind === 'event' ? selection.eventId : null}
@@ -1461,56 +1727,46 @@ export default function App() {
             events={allEvents}
             layers={layers}
             visibleLayerIds={visibleLayerIds}
-            showGujaratiCalendar={showGujaratiCalendar}
-            anyCulturalVisible={anyCulturalVisible}
+            todayFestivals={anchorDayFestivals}
             gujaratiScript={gujaratiScript}
             enabledWorldCalendars={enabledWorldCalendars}
             primaryTz={primaryTz}
-            secondaryTz={secondaryTz}
-            googleUser={googleUser}
-            selection={selection}
-            shareMode={shareMode}
-            availabilitySlots={availabilitySlots}
-            meetInputRef={meetInputRef}
-            searchInputRef={searchInputRef}
+            shareSlots={availabilitySlots}
+            isShareMode={shareMode}
             isDrawer={viewport.isDrawerMode}
-            onClosePanel={() => setRightOpen(false)}
+            selection={selection}
             onClearSelection={() => setSelection({ kind: 'none' })}
-            onSelectEvent={(ev) => setSelection({ kind: 'event', eventId: ev.id })}
-            onSelectFestival={(festival, panchang) =>
-              setSelection({ kind: 'festival', festival, panchang })
-            }
             onUpdateLocalEvent={handleUpdateLocalEvent}
             onRequestSaveGoogleEvent={requestSaveGoogleEvent}
             onDeleteEvent={handleDeleteEvent}
             onDuplicateEvent={handleDuplicateEvent}
-            onQuickCreateMeeting={handleQuickCreateMeeting}
             onScheduleOnDate={(dateKey, suggestedTitle) =>
               handleCreateEventFromRange(dateKey, 10 * 60, 11 * 60, suggestedTitle)
             }
+            onCloseDrawer={() => setRightOpen(false)}
             onToggleShareMode={() => {
               setShareMode((v) => !v);
               setSelection({ kind: 'none' });
             }}
-            onRemoveAvailabilitySlot={handleRemoveAvailabilitySlot}
-            onClearAvailabilitySlots={() => setAvailabilitySlots([])}
-            onJumpToDate={(d) => {
-              setAnchorDate(d);
-              if (viewport.isDrawerMode) setRightOpen(false);
-            }}
-            onOpenCommandMenu={() => setActiveModal('command')}
-            onOpenGoToDate={() => setActiveModal('goto')}
-            onOpenShortcuts={() => setActiveModal('shortcuts')}
+            onRemoveShareSlot={handleRemoveAvailabilitySlot}
+            onClearShareSlots={() => setAvailabilitySlots([])}
+            onCopyShareText={handleCopyShareText}
+            onSelectEvent={(ev) => setSelection({ kind: 'event', eventId: ev.id })}
+            onSelectFestival={(festival) =>
+              setSelection({
+                kind: 'festival',
+                festival,
+                panchang: getGujaratiPanchang(parseDateKey(festival.date)),
+              })
+            }
+            onQuickCreateEvent={handleQuickCreateEvent}
             onOpenSettings={(tab) => {
               if (viewport.isDrawerMode) setRightOpen(false);
               openSettings(tab);
             }}
-            onToggleAllCultural={handleToggleAllCultural}
-            onToggleGujaratiLayer={() => handleToggleLayer('gujarati-calendar')}
+            onOpenAuth={() => handleOpenAuth()}
             currentUser={currentUser}
-            onOpenAuth={() => setAuthModalOpen(true)}
-            onOpenExport={() => setExportModalOpen(true)}
-            weatherData={weatherData}
+            weather={weatherData}
             weatherLoading={weatherLoading}
             weatherError={weatherError}
             weatherUnits={weatherUnits}
@@ -1519,11 +1775,16 @@ export default function App() {
             onSearchWeatherCity={handleSetWeatherCity}
             onUseWeatherGeolocation={handleUseWeatherGeolocation}
             onRefreshWeather={() => void loadWeather(true)}
+            onJumpToDate={(d) => {
+              setAnchorDate(d);
+              if (viewport.isDrawerMode) setRightOpen(false);
+            }}
+            showToast={showToast}
           />
         )}
       </div>
 
-      {/* Command Palette, Go-To-Date, Timezone & Shortcuts Modals */}
+      {/* Command Palette & Go-To-Date Modal */}
       <Modals
         activeModal={activeModal}
         anchorDate={anchorDate}
@@ -1532,6 +1793,7 @@ export default function App() {
         anyCulturalVisible={anyCulturalVisible}
         showGujaratiCalendar={showGujaratiCalendar}
         gujaratiScript={gujaratiScript}
+        holidayRegion={holidayRegion}
         primaryTz={primaryTz}
         secondaryTz={secondaryTz}
         onClose={() => setActiveModal(null)}
@@ -1546,13 +1808,16 @@ export default function App() {
         onSetSecondaryTz={setSecondaryTz}
       />
 
-      {/* Dedicated Settings Menu with Toggle Switches for Festivals, 29 World Calendars, Weather & Google Calendar */}
+      {/* Consolidated Settings Modal (Holidays, World Calendars, Display, .ics Sync, Shortcuts, Google, Language, Apps) */}
       <SettingsModal
         open={settingsOpen}
         initialTab={settingsTab}
         anchorDate={anchorDate}
         layers={layers}
+        events={allEvents}
         gujaratiScript={gujaratiScript}
+        holidayRegion={holidayRegion}
+        primaryCalendar={primaryCalendar}
         enabledWorldCalendars={enabledWorldCalendars}
         headerSubCalendar={headerSubCalendar}
         selectedLanguage={selectedLanguage}
@@ -1568,6 +1833,14 @@ export default function App() {
         onToggleLayer={handleToggleLayer}
         onToggleAllCultural={handleToggleAllCultural}
         onToggleGujaratiScript={() => setGujaratiScript((v) => !v)}
+        onSetHolidayRegion={(reg) => {
+          setHolidayRegion(reg);
+          showToast(`Local holidays set to ${reg}`);
+        }}
+        onSetPrimaryCalendar={(id) => {
+          setPrimaryCalendar(id);
+          showToast('Primary calendar display updated');
+        }}
         onToggleWorldCalendar={handleToggleWorldCalendar}
         onEnableAllWorldCalendars={handleEnableAllWorldCalendars}
         onSetHeaderSubCalendar={setHeaderSubCalendar}
@@ -1576,37 +1849,51 @@ export default function App() {
         onSetWeatherLocationQuery={handleSetWeatherCity}
         onSetWeatherUnits={setWeatherUnits}
         onUseWeatherGeolocation={handleUseWeatherGeolocation}
-        onGoogleSignIn={handleGoogleSignIn}
+        onGoogleSignIn={() => void handleGoogleSignIn()}
         onGoogleSync={() => void syncGoogleCalendarData()}
         onGoogleLogout={handleGoogleLogout}
-      />
-
-      {/* Export / Import Modal (.ics) */}
-      <ExportModal
-        open={exportModalOpen}
-        onClose={() => setExportModalOpen(false)}
-        events={allEvents}
-        layers={layers}
-        anchorDate={anchorDate}
-        visibleDays={visibleDays}
-        visibleLayerIds={visibleLayerIds}
-        viewMode={effectiveViewMode}
-        timezone={primaryTz.id}
         onImportEvents={handleImportEvents}
+        onOpenDownloadHub={() => {
+          setSettingsOpen(false);
+          setDownloadHubOpen(true);
+        }}
+        showToast={showToast}
       />
 
-      {/* Searchable Keyboard Shortcuts Modal */}
-      <ShortcutsHelpModal
-        open={shortcutsModalOpen}
-        onClose={() => setShortcutsModalOpen(false)}
+      {/* Dedicated Astronomy & Celestial Almanac Modal */}
+      <AstronomyModal
+        open={astronomyOpen}
+        anchorDate={anchorDate}
+        locationName={weatherData?.location.name || weatherLocationQuery}
+        lat={weatherData?.location.lat}
+        lng={weatherData?.location.lng}
+        onClose={() => setAstronomyOpen(false)}
+        onJumpToDate={(d) => {
+          setAnchorDate(d);
+          setAstronomyOpen(false);
+        }}
       />
 
-      {/* Authentication & Profile Modal */}
+      {/* Device-Aware Desktop & Mobile Apps + Widgets Hub */}
+      <AppDownloadHub
+        open={downloadHubOpen}
+        onClose={() => setDownloadHubOpen(false)}
+        onLaunchWidget={(mode) => {
+          setDownloadHubOpen(false);
+          navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile');
+        }}
+        showToast={showToast}
+      />
+
+      {/* Local-First Device Account + Real Google Authentication Modal */}
       <AuthModal
         open={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
+        initialTab={authInitialTab}
         currentUser={currentUser}
-        onUserChange={setCurrentUser}
+        onClose={() => setAuthModalOpen(false)}
+        onUserChange={handleUserAuthChange}
+        onGoogleSignIn={handleGoogleSignIn}
+        googleSyncing={googleSyncing}
         showToast={showToast}
       />
 
@@ -1620,9 +1907,9 @@ export default function App() {
       {/* Footer Copyright Banner & Legal Navigation */}
       <footer className="h-[26px] px-3 bg-[#FAFAFA] border-t border-[#EFEFEF] flex items-center justify-between text-[11px] text-[#8C8C8C] shrink-0 select-none">
         <div className="flex items-center gap-2">
-          <span>© 2026 calendar.q. All rights reserved.</span>
+          <span>© 2026 calendar.q</span>
           <span className="hidden md:inline text-[#D4D4D4]">·</span>
-          <span className="hidden md:inline text-[#A0A0A0]">Unified Multi-Calendar Platform</span>
+          <span className="hidden md:inline text-[#A0A0A0]">Local-first Universal Calendar</span>
         </div>
         <div className="flex items-center gap-3">
           <button

@@ -1,66 +1,68 @@
 import { CalendarEvent, CalendarGroup, CalendarLayer } from '../types/calendar';
 
 export const INITIAL_GROUPS: CalendarGroup[] = [
-  { id: 'google-calendars', label: 'Google Calendar', isGoogleGroup: true },
-  { id: 'cultural-festivals', label: 'Festivals, Holidays & Panchang', isCulturalGroup: true },
+  { id: 'cultural-festivals', label: 'Holidays & Festivals', isCulturalGroup: true },
   { id: 'local-calendars', label: 'My Calendars (Local)' },
+  { id: 'google-calendars', label: 'Google Calendar', isGoogleGroup: true },
 ];
 
 export const INITIAL_LAYERS: CalendarLayer[] = [
-  // Synced Cultural, Indian, Gujarati, International & World Calendar Layers (all individually & master toggleable)
+  // Holidays & Festivals (ONLY Holidays & Indian Festivals live here; ONLY Holidays is selected by default)
+  {
+    id: 'national-holidays',
+    name: 'Local Holidays',
+    groupId: 'cultural-festivals',
+    color: 'crimson',
+    visible: true,
+    type: 'cultural',
+    description: 'Public & national holidays tailored to your local region',
+  },
   {
     id: 'indian-festivals',
     name: 'Indian Festivals',
     groupId: 'cultural-festivals',
     color: 'saffron',
-    visible: true,
+    visible: false,
     type: 'cultural',
     description: 'Diwali, Holi, Navratri, Janmashtami, Ganesh Chaturthi, Eid, Pongal, Onam, Gurpurab & more',
   },
+
+  // World Calendar Overlay Layers (organized inside the World Calendars section, OFF by default)
   {
     id: 'gujarati-calendar',
     name: 'Gujarati Calendar & Tithis',
-    groupId: 'cultural-festivals',
+    groupId: 'world-calendars',
     color: 'marigold',
-    visible: true,
-    type: 'cultural',
+    visible: false,
+    type: 'world',
     description: 'Vikram Samvat Tithi (Sud/Vad), Uttarayan, Bestu Varas, Agiyaras, Poonam, Amas & Vrats',
-  },
-  {
-    id: 'global-days',
-    name: 'International Holidays & Days',
-    groupId: 'cultural-festivals',
-    color: 'indigo',
-    visible: true,
-    type: 'cultural',
-    description: 'UN observances, global awareness, science, cultural & special days worldwide',
   },
   {
     id: 'world-observances',
     name: 'World Calendar Festivals',
-    groupId: 'cultural-festivals',
+    groupId: 'world-calendars',
     color: 'teal',
-    visible: true,
-    type: 'cultural',
+    visible: false,
+    type: 'world',
     description: 'Chinese New Year, Rosh Hashanah, Ramadan, Nowruz, Parsi Navroz, Losar, Songkran & more',
   },
   {
-    id: 'national-holidays',
-    name: 'National Holidays',
-    groupId: 'cultural-festivals',
-    color: 'crimson',
-    visible: true,
-    type: 'cultural',
-    description: 'Gazetted Indian & major public holidays',
+    id: 'global-days',
+    name: 'International Days',
+    groupId: 'world-calendars',
+    color: 'indigo',
+    visible: false,
+    type: 'world',
+    description: 'UN observances, global awareness, science & cultural days worldwide',
   },
 
-  // Clean Local Calendars (for adding personal events, birthdays, memorials/funeral dates, workspace & plans without pre-filled sample junk)
+  // Clean Local Calendars (stored on this device; unchecked on clean sign-in, auto-enabled when adding an event)
   {
     id: 'personal',
     name: 'Personal Events',
     groupId: 'local-calendars',
     color: 'blue',
-    visible: true,
+    visible: false,
     type: 'personal',
     icon: 'calendar',
   },
@@ -69,7 +71,7 @@ export const INITIAL_LAYERS: CalendarLayer[] = [
     name: 'Birthdays',
     groupId: 'local-calendars',
     color: 'amber',
-    visible: true,
+    visible: false,
     type: 'personal',
     icon: 'cake',
   },
@@ -78,7 +80,7 @@ export const INITIAL_LAYERS: CalendarLayer[] = [
     name: 'Memorials & Funeral Dates',
     groupId: 'local-calendars',
     color: 'gray',
-    visible: true,
+    visible: false,
     type: 'personal',
     icon: 'flower',
   },
@@ -87,15 +89,14 @@ export const INITIAL_LAYERS: CalendarLayer[] = [
     name: 'Workspace & Plans',
     groupId: 'local-calendars',
     color: 'purple',
-    visible: true,
+    visible: false,
     type: 'personal',
     icon: 'briefcase',
   },
 ];
 
 /**
- * Starts completely clean with zero fake sample events or emails, per user instruction.
- * Users can connect Google Calendar or add their own events, birthdays, memorials, and workspace plans.
+ * Starts completely clean with zero fake sample events.
  */
 export function buildInitialEvents(): CalendarEvent[] {
   return [];

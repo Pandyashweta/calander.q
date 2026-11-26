@@ -48,7 +48,7 @@ export const WORLD_CALENDAR_SYSTEMS: WorldCalendarSystemMeta[] = [
     group: 'indian',
     region: 'Gujarat, India',
     wikiUrl: 'https://en.wikipedia.org/wiki/Vikram_Samvat',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     id: 'hindu-purnimanta',

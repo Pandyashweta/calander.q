@@ -72,7 +72,7 @@ export interface WeatherBundle {
  * Coordinates are resolved dynamically via Google Maps Geocoding API (zero hardcoded coordinates).
  */
 export const TIMEZONE_DEFAULT_CITY_QUERY: Record<string, string> = {
-  IST: 'Ahmedabad, India',
+  IST: 'New Delhi, India',
   EST: 'New York, NY, USA',
   PST: 'San Francisco, CA, USA',
   GMT: 'London, UK',
@@ -81,10 +81,36 @@ export const TIMEZONE_DEFAULT_CITY_QUERY: Record<string, string> = {
   SGT: 'Singapore',
   JST: 'Tokyo, Japan',
   AEDT: 'Sydney, Australia',
+  'Asia/Kolkata': 'New Delhi, India',
+  'Asia/Calcutta': 'New Delhi, India',
+  'America/New_York': 'New York, NY, USA',
+  'America/Los_Angeles': 'Los Angeles, CA, USA',
+  'America/Chicago': 'Chicago, IL, USA',
+  'America/Denver': 'Denver, CO, USA',
+  'America/Toronto': 'Toronto, Canada',
+  'America/Vancouver': 'Vancouver, Canada',
+  'Europe/London': 'London, UK',
+  'Europe/Paris': 'Paris, France',
+  'Europe/Berlin': 'Berlin, Germany',
+  'Asia/Dubai': 'Dubai, UAE',
+  'Asia/Singapore': 'Singapore',
+  'Asia/Tokyo': 'Tokyo, Japan',
+  'Australia/Sydney': 'Sydney, Australia',
 };
 
 export function getDefaultCityQueryForTimezone(tzId: string): string {
-  return TIMEZONE_DEFAULT_CITY_QUERY[tzId] || 'Ahmedabad, India';
+  if (TIMEZONE_DEFAULT_CITY_QUERY[tzId]) {
+    return TIMEZONE_DEFAULT_CITY_QUERY[tzId];
+  }
+  // Parse IANA timezone strings like "America/Phoenix", "Europe/Amsterdam", "Asia/Seoul"
+  if (tzId && tzId.includes('/')) {
+    const parts = tzId.split('/');
+    const city = parts[parts.length - 1].replace(/_/g, ' ').trim();
+    if (city && city.toLowerCase() !== 'utc' && city.toLowerCase() !== 'gmt') {
+      return city;
+    }
+  }
+  return 'London, UK';
 }
 
 const GMP_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';

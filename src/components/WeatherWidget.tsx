@@ -41,7 +41,7 @@ interface WeatherWidgetProps {
   variant?: 'header' | 'sidebar';
 }
 
-const FallbackWeatherIcon: React.FC<{
+export const FallbackWeatherIcon: React.FC<{
   conditionType?: string;
   isDaytime?: boolean;
   className?: string;
@@ -71,7 +71,7 @@ const FallbackWeatherIcon: React.FC<{
   return <Sun className={`${className} text-[#E69A14]`} />;
 };
 
-const WeatherConditionIcon: React.FC<{
+export const WeatherConditionIcon: React.FC<{
   iconBaseUri: string | null;
   conditionType?: string;
   isDaytime?: boolean;

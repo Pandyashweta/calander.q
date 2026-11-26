@@ -8,6 +8,7 @@ import {
   TIMEZONE_OPTIONS,
   parseDateKey,
 } from '../utils/dateUtils';
+import { HolidayRegionCode } from '../utils/deviceUtils';
 
 export type ActiveModal = null | 'command' | 'goto' | 'timezone' | 'shortcuts';
 
@@ -19,6 +20,7 @@ interface ModalsProps {
   anyCulturalVisible: boolean;
   showGujaratiCalendar: boolean;
   gujaratiScript: boolean;
+  holidayRegion?: HolidayRegionCode;
   primaryTz: TimezoneOption;
   secondaryTz: TimezoneOption;
   onClose: () => void;
@@ -41,6 +43,7 @@ export const Modals: React.FC<ModalsProps> = ({
   anyCulturalVisible,
   showGujaratiCalendar,
   gujaratiScript,
+  holidayRegion = 'IN',
   primaryTz,
   secondaryTz,
   onClose,
@@ -85,9 +88,9 @@ export const Modals: React.FC<ModalsProps> = ({
 
   const majorFestivalsThisYear = useMemo(() => {
     if (activeModal !== 'goto' && activeModal !== 'command') return [];
-    const all = getAllFestivalsForYear(anchorDate.getFullYear());
+    const all = getAllFestivalsForYear(anchorDate.getFullYear(), holidayRegion);
     return all.filter((f) => f.isMajor);
-  }, [activeModal, anchorDate]);
+  }, [activeModal, anchorDate, holidayRegion]);
 
   const commandActions = useMemo(() => {
     const q = cmdQuery.trim().toLowerCase();
