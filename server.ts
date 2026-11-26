@@ -3,12 +3,12 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as authService from './server/authService';
+import * as authService from './server/authService.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const GMP_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
 function getMapsApiKey(): string | undefined {
