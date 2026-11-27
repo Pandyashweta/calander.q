@@ -16,16 +16,34 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/**
+ * Returns true ONLY when calendar.q is running as a downloaded/installed standalone app
+ * (PWA standalone/window-controls-overlay window, iOS Home Screen app, Electron desktop app,
+ * Capacitor native wrapper, or Android Trusted Web Activity) — NOT in a regular browser tab.
+ */
+export function isDownloadedAppRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  const win = window as Window & { electronAPI?: unknown; Capacitor?: unknown };
+  const standaloneMatch =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: window-controls-overlay)').matches ||
+    window.matchMedia('(display-mode: minimal-ui)').matches;
+  const iosStandalone =
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  const nativeBridge = Boolean(win.electronAPI || win.Capacitor);
+  const androidTwa =
+    typeof document !== 'undefined' && document.referrer.startsWith('android-app://');
+  return Boolean(standaloneMatch || iosStandalone || nativeBridge || androidTwa);
+}
+
 export function usePWAInstall() {
   const [canInstall, setCanInstall] = useState(Boolean(deferredPrompt));
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(() => isDownloadedAppRuntime());
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    const standalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-    setIsInstalled(standalone);
+    const syncInstalled = () => setIsInstalled(isDownloadedAppRuntime());
+    syncInstalled();
 
     const ua = window.navigator.userAgent;
     setIsIOS(/iPad|iPhone|iPod/.test(ua) && !(window as Window & { MSStream?: unknown }).MSStream);
@@ -39,9 +57,15 @@ export function usePWAInstall() {
       setIsInstalled(true);
     };
 
+    const standaloneMq = window.matchMedia('(display-mode: standalone)');
+    const wcoMq = window.matchMedia('(display-mode: window-controls-overlay)');
+    standaloneMq.addEventListener?.('change', syncInstalled);
+    wcoMq.addEventListener?.('change', syncInstalled);
     window.addEventListener('appinstalled', onInstalled);
     return () => {
       promptListeners.delete(syncPrompt);
+      standaloneMq.removeEventListener?.('change', syncInstalled);
+      wcoMq.removeEventListener?.('change', syncInstalled);
       window.removeEventListener('appinstalled', onInstalled);
     };
   }, []);

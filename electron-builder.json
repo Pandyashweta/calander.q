@@ -1,0 +1,38 @@
+{
+  "appId": "com.calanderq.app",
+  "productName": "Calander.Q",
+  "npmRebuild": false,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "!node_modules/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/android-chrome-512x512.png"
+  },
+  "nsis": {
+    "artifactName": "calander-q-setup-windows-amd64.${ext}",
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Calander.Q"
+  },
+  "mac": {
+    "target": ["dmg", "zip"],
+    "icon": "public/android-chrome-512x512.png"
+  },
+  "linux": {
+    "target": ["AppImage", "deb"],
+    "icon": "public/android-chrome-512x512.png"
+  }
+}

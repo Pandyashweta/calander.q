@@ -13,9 +13,11 @@ import {
 import { UserAccount } from '../types/calendar';
 import {
   deleteAccountApi,
+  isLocalModeAllowed,
   listLocalAccounts,
   loginApi,
   logoutApi,
+  requestPasswordResetApi,
   resetLocalPasswordApi,
   signUpApi,
   updateProfileApi,
@@ -53,21 +55,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<UserAccount[]>([]);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const localAllowed = isLocalModeAllowed();
 
   useEffect(() => {
     if (open) {
       setError(null);
+      setResetMessage(null);
       setConfirmDelete(false);
       setPassword('');
       setNewPassword('');
-      setSavedAccounts(listLocalAccounts());
+      setSavedAccounts(localAllowed ? listLocalAccounts() : []);
       setTab(currentUser ? 'profile' : initialTab);
       if (currentUser) {
         setName(currentUser.name || '');
         setEmail(currentUser.email || '');
       }
     }
-  }, [open, currentUser, initialTab]);
+  }, [open, currentUser, initialTab, localAllowed]);
 
   if (!open) return null;
 
@@ -78,7 +83,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await loginApi(email, password);
       onUserChange(res.user, true);
-      showToast?.(`Signed in locally as ${res.user.name}`);
+      showToast?.(`Signed in as ${res.user.name}`);
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Sign in failed.');
@@ -94,10 +99,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await signUpApi(name, email, password);
       onUserChange(res.user, true);
-      showToast?.(`Local account created on this device for ${res.user.name}`);
+      showToast?.(
+        localAllowed
+          ? `Account created on this device for ${res.user.name}`
+          : `Welcome to calendar.q, ${res.user.name}`
+      );
       onClose();
     } catch (err: any) {
-      setError(err?.message || 'Could not create local account.');
+      setError(err?.message || 'Could not create account.');
     } finally {
       setLoading(false);
     }
@@ -120,18 +129,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleResetLocalPassword = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResetMessage(null);
     setLoading(true);
     try {
-      await resetLocalPasswordApi(email, newPassword);
-      showToast?.('Local password updated. You can now sign in.');
-      setPassword('');
-      setNewPassword('');
-      setTab('signin');
+      if (localAllowed) {
+        await resetLocalPasswordApi(email, newPassword);
+        showToast?.('Device password updated. You can now sign in.');
+        setPassword('');
+        setNewPassword('');
+        setTab('signin');
+      } else {
+        const msg = await requestPasswordResetApi(email);
+        setResetMessage(msg);
+        showToast?.('Password reset link dispatched.');
+      }
     } catch (err: any) {
-      setError(err?.message || 'Could not update local password.');
+      setError(err?.message || 'Could not reset password.');
     } finally {
       setLoading(false);
     }
@@ -149,7 +165,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       await deleteAccountApi();
       onUserChange(null, false);
-      showToast?.('Local account deleted from this device.');
+      showToast?.('Account deleted.');
       onClose();
     } catch (err: any) {
       setError(err?.message || 'Failed to delete account.');
@@ -166,7 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const updated = await updateProfileApi({ name: name.trim() || currentUser.name });
       onUserChange(updated, false);
-      showToast?.('Profile saved on this device.');
+      showToast?.('Profile updated.');
     } catch (err: any) {
       setError(err?.message || 'Failed to update profile.');
     } finally {
@@ -192,11 +208,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <Shield className="w-4 h-4 text-[#1A1A1A]" />
             <h2 className="text-[14px] font-semibold text-[#1A1A1A]">
               {tab === 'profile'
-                ? 'Local Account & Profile'
+                ? localAllowed
+                  ? 'Device Account & Profile'
+                  : 'Account & Profile'
                 : tab === 'signup'
-                ? 'Create Local Account'
+                ? localAllowed
+                  ? 'Create Local Account'
+                  : 'Create Account'
                 : tab === 'forgot'
-                ? 'Reset Local Password'
+                ? localAllowed
+                  ? 'Reset Device Password'
+                  : 'Reset Password'
                 : 'Sign In to calendar.q'}
             </h2>
           </div>
@@ -210,13 +232,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </button>
         </div>
 
-        {/* Device-Local Privacy Notice */}
-        <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-[#F7F7F7] border border-[#E8E8E8] flex items-start gap-2 text-[11.5px] text-[#525252]">
-          <HardDrive className="w-3.5 h-3.5 text-[#1A1A1A] shrink-0 mt-0.5" />
-          <span>
-            Saved privately on this computer or phone only. Credentials and local calendars never leave your device.
-          </span>
-        </div>
+        {/* Device-Local Privacy Notice (Only shown inside the downloaded app) */}
+        {localAllowed && (
+          <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-[#F7F7F7] border border-[#E8E8E8] flex items-start gap-2 text-[11.5px] text-[#525252]">
+            <HardDrive className="w-3.5 h-3.5 text-[#1A1A1A] shrink-0 mt-0.5" />
+            <span>
+              App local mode active: credentials and calendars stay stored privately on your device.
+            </span>
+          </div>
+        )}
 
         {/* Error Alert */}
         {error && (
@@ -226,11 +250,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
+        {resetMessage && (
+          <div className="mx-5 mt-3 p-2.5 rounded-lg bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-[12px] flex items-start gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+            <span className="flex-1 leading-snug">{resetMessage}</span>
+          </div>
+        )}
+
         <div className="p-5 overflow-y-auto cal-scroll max-h-[72vh]">
           {/* ================= SIGN IN TAB ================= */}
           {tab === 'signin' && (
             <div className="space-y-4">
-              {savedAccounts.length > 0 && (
+              {localAllowed && savedAccounts.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="text-[11px] font-medium text-[#737373]">
                     Accounts on this device
@@ -277,11 +308,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       type="button"
                       onClick={() => {
                         setError(null);
+                        setResetMessage(null);
                         setTab('forgot');
                       }}
                       className="text-[11.5px] text-[#185D8F] hover:underline cursor-pointer"
                     >
-                      Reset local password
+                      {localAllowed ? 'Reset device password' : 'Forgot password?'}
                     </button>
                   </div>
                   <div className="relative">
@@ -327,7 +359,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
 
               <div className="pt-1 text-center text-[12px] text-[#737373]">
-                New on this device?{' '}
+                {localAllowed ? 'New on this device? ' : 'New to calendar.q? '}
                 <button
                   type="button"
                   onClick={() => {
@@ -336,7 +368,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   }}
                   className="text-[#185D8F] font-medium hover:underline cursor-pointer"
                 >
-                  Create a local account
+                  {localAllowed ? 'Create a local account' : 'Create an account'}
                 </button>
               </div>
             </div>
@@ -403,7 +435,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   disabled={loading || googleSyncing}
                   className="w-full py-2 bg-[#1A1A1A] hover:bg-[#333333] text-white rounded-lg text-[13px] font-medium cursor-pointer transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Saving on device...' : 'Create Local Account'}
+                  {loading
+                    ? 'Creating account...'
+                    : localAllowed
+                    ? 'Create Local Account'
+                    : 'Create Account'}
                 </button>
               </form>
 
@@ -443,11 +479,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {/* ================= RESET LOCAL PASSWORD TAB ================= */}
+          {/* ================= RESET PASSWORD TAB ================= */}
           {tab === 'forgot' && (
-            <form onSubmit={handleResetLocalPassword} className="space-y-4">
+            <form onSubmit={handleResetPassword} className="space-y-4">
               <p className="text-[12px] text-[#666666] leading-relaxed">
-                Update the password for an account stored on this device.
+                {localAllowed
+                  ? 'Update the password for an account stored on this device.'
+                  : 'Enter your account email to receive password reset instructions.'}
               </p>
               <div>
                 <label className="block text-[12px] font-medium text-[#404040] mb-1">
@@ -462,26 +500,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="w-full bg-white border border-[#DCDCDC] rounded-lg px-3 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
                 />
               </div>
-              <div>
-                <label className="block text-[12px] font-medium text-[#404040] mb-1">
-                  New password (min 8 characters)
-                </label>
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-white border border-[#DCDCDC] rounded-lg px-3 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
-                />
-              </div>
+              {localAllowed && (
+                <div>
+                  <label className="block text-[12px] font-medium text-[#404040] mb-1">
+                    New password (min 8 characters)
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-white border border-[#DCDCDC] rounded-lg px-3 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                  />
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full py-2 bg-[#1A1A1A] hover:bg-[#333333] text-white rounded-lg text-[13px] font-medium cursor-pointer disabled:opacity-50"
               >
-                {loading ? 'Updating...' : 'Update Local Password'}
+                {loading
+                  ? 'Processing...'
+                  : localAllowed
+                  ? 'Update Device Password'
+                  : 'Send Reset Link'}
               </button>
               <div className="text-center">
                 <button
@@ -523,8 +567,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <CheckCircle2 className="w-3 h-3" />
                     <span>
                       {currentUser.provider === 'google'
-                        ? 'Google Connected · Local Profile'
-                        : 'Stored locally on this device'}
+                        ? 'Google Connected'
+                        : localAllowed
+                        ? 'Saved on this device'
+                        : 'Account synced'}
                     </span>
                   </div>
                 </div>
@@ -567,7 +613,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     onClick={() => setConfirmDelete(true)}
                     className="text-[12px] text-[#C92A2A] hover:underline cursor-pointer"
                   >
-                    Remove Local Account
+                    {localAllowed ? 'Remove Device Account' : 'Delete Account'}
                   </button>
                 ) : (
                   <div className="flex items-center gap-2">

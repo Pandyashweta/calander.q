@@ -6,6 +6,7 @@ import {
   CloudSun,
   Download,
   Monitor,
+  Pin,
   Smartphone,
 } from 'lucide-react';
 import { CalendarEvent, CalendarTask } from '../types/calendar';
@@ -13,10 +14,14 @@ import { getFestivalsForDate } from '../data/festivalsAndDays';
 import { DAY_NAMES_MINI, MONTH_NAMES, formatDateKey, getMonthGrid, isSameDay } from '../utils/dateUtils';
 import {
   HolidayRegionCode,
+  detectDeviceInfo,
   detectLocalHolidayRegion,
+  downloadFloatingDesktopWidget,
   downloadStandaloneWidgetHtml,
   getRegionLabel,
+  launchFloatingDesktopWidget,
 } from '../utils/deviceUtils';
+import { isDownloadedAppRuntime } from '../hooks/usePWAInstall';
 import { WeatherBundle, formatTempRounded } from '../services/weatherService';
 
 interface WidgetViewProps {
@@ -107,11 +112,13 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
       {!initialEmbed && (
         <header className="px-4 sm:px-6 py-3 bg-white border-b border-[#E5E5E5] flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2.5">
-            <span className="w-7 h-7 rounded-[7px] overflow-hidden bg-black flex items-center justify-center shrink-0">
-              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
-            </span>
+            <img
+              src="/android-chrome-192x192.png"
+              alt=""
+              className="w-5 h-5 object-contain shrink-0 invert"
+            />
             <span className="text-[14px] font-bold tracking-tight">
-              calendar<span className="text-[#DC2626]">.q</span>
+              Calander<span className="text-[#DC2626]">.Q</span>
             </span>
             <span className="text-[12px] text-[#737373]">
               · {mode === 'desktop' ? 'Desktop Widget' : 'Mobile Widget'}
@@ -159,17 +166,32 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
 
             <button
               type="button"
-              onClick={() =>
-                downloadStandaloneWidgetHtml(
-                  mode,
-                  `${origin}/?widget=${mode}&embed=1`,
-                  `${origin}/?open=calendar`
-                )
-              }
+              onClick={() => void launchFloatingDesktopWidget(origin)}
+              className="px-3 py-1.5 rounded-lg border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+              title="Pop out an always-on-top floating widget on your desktop"
+            >
+              <Pin className="w-3.5 h-3.5" />
+              <span>Pin to Desktop</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const dev = detectDeviceInfo();
+                if (dev.platform === 'windows' || dev.platform === 'macos' || dev.platform === 'linux') {
+                  downloadFloatingDesktopWidget(dev.platform, origin);
+                } else {
+                  downloadStandaloneWidgetHtml(
+                    mode,
+                    `${origin}/?widget=${mode}&embed=1`,
+                    `${origin}/?open=calendar`
+                  );
+                }
+              }}
               className="px-3 py-1.5 rounded-lg border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Save Offline Widget</span>
+              <span>Save Widget</span>
             </button>
 
             <button
@@ -202,8 +224,11 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
               : 'w-full max-w-[440px]')
           }`}
         >
-          {/* Top Row */}
-          <div className="flex items-center justify-between gap-2 mb-3">
+          {/* Top Row (draggable in frameless Electron widget mode) */}
+          <div
+            style={initialEmbed ? ({ WebkitAppRegion: 'drag' } as React.CSSProperties) : undefined}
+            className="flex items-center justify-between gap-2 mb-3 select-none"
+          >
             <div className="flex items-center gap-1.5 text-[11.5px] font-semibold uppercase tracking-wider text-[#DC2626]">
               <span>{weekdayLabel}</span>
             </div>
@@ -320,14 +345,14 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
           <div className="pt-3 mt-1 flex items-center justify-between text-[11.5px]">
             <span className="text-[#8C8C8C] inline-flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
-              <span>Local-first sync</span>
+              <span>{isDownloadedAppRuntime() ? 'Offline-ready widget' : 'Live widget'}</span>
             </span>
             <button
               type="button"
               onClick={onOpenCalendar}
               className="font-semibold text-[#171717] hover:underline cursor-pointer"
             >
-              Open calendar.q →
+              Open Calander.Q →
             </button>
           </div>
         </div>

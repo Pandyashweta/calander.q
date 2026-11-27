@@ -680,7 +680,7 @@ async function startServer() {
       weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
       monthYear: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       isoDate: now.toISOString().slice(0, 10),
-      summary: '33 World Calendars · Local-first',
+      summary: '33 World Calendars · Universal Calendar',
       appUrl,
     });
   });
@@ -724,6 +724,37 @@ async function startServer() {
       console.error('Waitlist signup error:', err);
       res.status(500).json({ error: { message: 'Unable to save waitlist signup right now.' } });
     }
+  });
+
+  // Compiled Desktop Installer Downloads (e.g. calander-q-setup-windows-amd64.exe)
+  const releaseDir = path.resolve(__dirname, 'release');
+  app.get('/api/downloads/available', (_req, res) => {
+    const winExe = 'calander-q-setup-windows-amd64.exe';
+    const winPath = path.join(releaseDir, winExe);
+    const hasWinExe = fs.existsSync(winPath);
+    res.json({
+      windows: hasWinExe
+        ? {
+            filename: winExe,
+            url: `/downloads/${winExe}`,
+            sizeBytes: fs.statSync(winPath).size,
+          }
+        : null,
+    });
+  });
+
+  app.get('/downloads/:filename', (req, res) => {
+    const safeName = path.basename(req.params.filename || '');
+    if (!safeName || !/\.(exe|msi|dmg|AppImage|deb|zip|apk)$/i.test(safeName)) {
+      res.status(404).send('Installer not found.');
+      return;
+    }
+    const filePath = path.join(releaseDir, safeName);
+    if (!fs.existsSync(filePath)) {
+      res.status(404).send('Installer not built yet. Run npm run desktop:build.');
+      return;
+    }
+    res.download(filePath, safeName);
   });
 
   if (process.env.NODE_ENV !== 'production') {

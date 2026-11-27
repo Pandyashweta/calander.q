@@ -5,12 +5,14 @@ type SyncVisualState = 'local' | 'offline' | 'syncing' | 'synced';
 
 interface OfflineSyncIndicatorProps {
   isOnline: boolean;
+  allowLocalMode?: boolean;
   isExternalSyncing?: boolean;
   onReconnectSync?: () => void;
 }
 
 export const OfflineSyncIndicator: React.FC<OfflineSyncIndicatorProps> = ({
   isOnline,
+  allowLocalMode = false,
   isExternalSyncing = false,
   onReconnectSync,
 }) => {
@@ -67,12 +69,18 @@ export const OfflineSyncIndicator: React.FC<OfflineSyncIndicatorProps> = ({
       <div
         role="status"
         aria-live="polite"
-        title="Offline mode — all calendar events, holidays, and edits remain saved locally on this device and will sync once you reconnect."
+        title={
+          allowLocalMode
+            ? 'Offline mode — all calendar events, holidays, and edits remain saved locally on this device and will sync once you reconnect.'
+            : 'You are offline. Download the app to unlock full offline local storage.'
+        }
         className="h-[30px] px-2.5 rounded-[6px] bg-[#FEF3C7] dark:bg-[#422006]/80 text-[#92400E] dark:text-[#FCD34D] text-[11.5px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 select-none shadow-[0_1px_2px_rgba(146,64,14,0.10)] transition-colors duration-200"
       >
         <WifiOff className="w-3.5 h-3.5 shrink-0" />
         <span>Offline</span>
-        <span className="hidden xl:inline text-[#B45309] dark:text-[#FBBF24] font-normal">· Local</span>
+        {allowLocalMode && (
+          <span className="hidden xl:inline text-[#B45309] dark:text-[#FBBF24] font-normal">· Local</span>
+        )}
       </div>
     );
   }
@@ -109,10 +117,14 @@ export const OfflineSyncIndicator: React.FC<OfflineSyncIndicatorProps> = ({
     );
   }
 
-  // Quiet steady-state local-first cue
+  // Steady-state local-first cue ONLY shown inside the downloaded/installed app
+  if (!allowLocalMode) {
+    return null;
+  }
+
   return (
     <div
-      title="Local-first mode — your calendar stays stored on this device and works offline."
+      title="Downloaded app local mode — your calendar stays stored on this device and works offline."
       className="h-[30px] px-2 sm:px-2.5 rounded-[6px] bg-[#F5F5F7] dark:bg-[#1C1C22] text-[#52525B] dark:text-[#A1A1AA] text-[11.5px] font-medium inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 select-none transition-colors duration-200"
     >
       <HardDrive className="w-3.5 h-3.5 text-[#71717A] dark:text-[#8E8E99] shrink-0" />

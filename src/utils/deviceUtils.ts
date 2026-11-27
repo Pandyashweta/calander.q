@@ -182,7 +182,7 @@ export function downloadPlatformAppLauncher(platform: DevicePlatform, appOrigin:
   if (platform === 'macos') {
     const script = `#!/bin/bash
 # calendar.q — macOS Desktop App Launcher
-# Opens calendar.q in a dedicated standalone desktop window
+# Opens calendar.q in a dedicated standalone desktop window (zero browser tabs)
 URL="${calUrl}"
 if [ -d "/Applications/Google Chrome.app" ]; then
   open -na "Google Chrome" --args --app="$URL" --window-size=1360,860
@@ -200,18 +200,30 @@ fi
 
   if (platform === 'windows') {
     const script = `@echo off
-REM calendar.q — Windows Desktop App Launcher
-set URL=${calUrl}
-where msedge >nul 2>nul
-if %ERRORLEVEL%==0 (
-  start "" msedge --app="%URL%" --window-size=1360,860
-  exit /b
+setlocal
+REM calendar.q — Windows Standalone Desktop App Launcher (runs without browser tabs)
+set "URL=${calUrl}"
+
+for %%B in (
+  "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
+  "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+  "%ProgramFiles(x86)%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+  "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+) do (
+  if exist %%B (
+    start "" %%B --app="%URL%" --window-size=1360,860
+    exit /b
+  )
 )
-where chrome >nul 2>nul
-if %ERRORLEVEL%==0 (
-  start "" chrome --app="%URL%" --window-size=1360,860
-  exit /b
-)
+
+where msedge >nul 2>nul && (start "" msedge --app="%URL%" --window-size=1360,860 & exit /b)
+where chrome >nul 2>nul && (start "" chrome --app="%URL%" --window-size=1360,860 & exit /b)
+where brave >nul 2>nul && (start "" brave --app="%URL%" --window-size=1360,860 & exit /b)
+
 start "" "%URL%"
 `;
     triggerFileDownload('calendar-q-windows-app.cmd', script, 'text/plain;charset=utf-8');
@@ -224,7 +236,7 @@ Version=1.0
 Type=Application
 Name=calendar.q
 Comment=Universal Calendar, World Clocks & Holidays
-Exec=xdg-open ${calUrl}
+Exec=sh -c 'for b in google-chrome microsoft-edge brave-browser chromium chromium-browser; do if command -v "$b" >/dev/null 2>&1; then exec "$b" --app="${calUrl}"; fi; done; exec xdg-open "${calUrl}"'
 Terminal=false
 Categories=Office;Calendar;Utility;
 StartupNotify=true
@@ -366,18 +378,30 @@ export function downloadFloatingDesktopWidget(
 
   if (platform === 'windows') {
     const cmd = `@echo off
+setlocal
 REM calendar.q — Floating Windows Desktop Widget (380x480 chromeless window)
-set URL=${embedUrl}
-where msedge >nul 2>nul
-if %ERRORLEVEL%==0 (
-  start "" msedge --app="%URL%" --window-size=400,500 --window-position=40,40
-  exit /b
+set "URL=${embedUrl}"
+
+for %%B in (
+  "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
+  "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+  "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+  "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+  "%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+  "%ProgramFiles(x86)%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+  "%LocalAppData%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"
+) do (
+  if exist %%B (
+    start "" %%B --app="%URL%" --window-size=400,500 --window-position=40,40
+    exit /b
+  )
 )
-where chrome >nul 2>nul
-if %ERRORLEVEL%==0 (
-  start "" chrome --app="%URL%" --window-size=400,500 --window-position=40,40
-  exit /b
-)
+
+where msedge >nul 2>nul && (start "" msedge --app="%URL%" --window-size=400,500 --window-position=40,40 & exit /b)
+where chrome >nul 2>nul && (start "" chrome --app="%URL%" --window-size=400,500 --window-position=40,40 & exit /b)
+where brave >nul 2>nul && (start "" brave --app="%URL%" --window-size=400,500 --window-position=40,40 & exit /b)
+
 start "" "%URL%"
 `;
     triggerFileDownload('calendar-q-windows-widget.cmd', cmd, 'text/plain;charset=utf-8');
@@ -407,6 +431,10 @@ fi
 URL="${embedUrl}"
 if command -v google-chrome >/dev/null 2>&1; then
   google-chrome --app="$URL" --window-size=400,500 &
+elif command -v microsoft-edge >/dev/null 2>&1; then
+  microsoft-edge --app="$URL" --window-size=400,500 &
+elif command -v brave-browser >/dev/null 2>&1; then
+  brave-browser --app="$URL" --window-size=400,500 &
 elif command -v chromium >/dev/null 2>&1; then
   chromium --app="$URL" --window-size=400,500 &
 else
@@ -417,66 +445,123 @@ fi
 }
 
 /**
- * Generates and downloads a crisp self-contained Desktop or Mobile Widget HTML file
- * that works offline, shows live clock, month calendar, local date, and opens calendar.q.
+ * Opens an instant, chromeless, always-on-top Floating Desktop Widget window
+ * using Chrome/Edge/Brave Document Picture-in-Picture (or a standalone popup window fallback).
  */
-export function downloadStandaloneWidgetHtml(
+export async function launchFloatingDesktopWidget(appOrigin: string): Promise<'pip' | 'popup' | 'blocked'> {
+  const cleanOrigin = appOrigin.replace(/\/$/, '');
+  const embedUrl = `${cleanOrigin}/?widget=desktop&embed=1`;
+  const appUrl = `${cleanOrigin}/?open=calendar`;
+
+  if (typeof window === 'undefined') return 'blocked';
+
+  const electronWin = window as Window & {
+    electronAPI?: { toggleWidget?: () => Promise<boolean> };
+  };
+  if (electronWin.electronAPI?.toggleWidget) {
+    await electronWin.electronAPI.toggleWidget();
+    return 'pip';
+  }
+
+  const docPip = (
+    window as Window & {
+      documentPictureInPicture?: {
+        requestWindow: (opts?: { width?: number; height?: number }) => Promise<Window>;
+      };
+    }
+  ).documentPictureInPicture;
+
+  if (docPip?.requestWindow) {
+    try {
+      const pipWindow = await docPip.requestWindow({ width: 360, height: 440 });
+      pipWindow.document.open();
+      pipWindow.document.write(buildStandaloneWidgetDocument('desktop', embedUrl, appUrl, true));
+      pipWindow.document.close();
+      return 'pip';
+    } catch {
+      // Fallback to standalone popup below
+    }
+  }
+
+  const popup = window.open(
+    embedUrl,
+    'calander_q_desktop_widget',
+    'popup=yes,width=400,height=500,menubar=no,toolbar=no,location=no,status=no,resizable=yes'
+  );
+  return popup ? 'popup' : 'blocked';
+}
+
+function buildStandaloneWidgetDocument(
   mode: 'desktop' | 'mobile',
   widgetLiveUrl: string,
-  appUrl: string
-) {
+  appUrl: string,
+  darkTheme = false
+): string {
   const isMobile = mode === 'mobile';
-  const html = `<!doctype html>
+  const bg = darkTheme ? '#0A0908' : '#F5F5F4';
+  const cardBg = darkTheme ? '#0F0F0F' : '#FFFFFF';
+  const cardBorder = darkTheme ? 'rgba(255,255,255,0.14)' : '#E5E5E5';
+  const textPrimary = darkTheme ? '#FFFFFF' : '#171717';
+  const textMuted = darkTheme ? '#858585' : '#525252';
+  const divider = darkTheme ? 'rgba(255,255,255,0.1)' : '#F0F0F0';
+  const cellMuted = darkTheme ? '#3F3F46' : '#D4D4D4';
+  const todayBg = darkTheme ? '#FFFFFF' : '#171717';
+  const todayText = darkTheme ? '#0A0908' : '#FFFFFF';
+  const btnPrimaryBg = darkTheme ? '#FFFFFF' : '#171717';
+  const btnPrimaryText = darkTheme ? '#0A0908' : '#FFFFFF';
+  const btnSecBg = darkTheme ? '#171615' : '#F5F5F5';
+
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>calendar.q — ${isMobile ? 'Mobile' : 'Desktop'} Widget</title>
+<title>Calander.Q — ${isMobile ? 'Mobile' : 'Desktop'} Widget</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "Segoe UI", Roboto, sans-serif;
-    background: #F5F5F4;
-    color: #171717;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Plus Jakarta Sans", "Segoe UI", Roboto, sans-serif;
+    background: ${bg};
+    color: ${textPrimary};
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: ${isMobile ? '16px' : '24px'};
+    padding: ${darkTheme ? '10px' : isMobile ? '16px' : '24px'};
   }
   .widget {
-    width: ${isMobile ? '100%' : '360px'};
+    width: 100%;
     max-width: 390px;
-    background: #FFFFFF;
-    border: 1px solid #E5E5E5;
-    border-radius: 22px;
-    padding: 20px;
-    box-shadow: 0 14px 36px rgba(0,0,0,0.08);
+    background: ${cardBg};
+    border: 1px solid ${cardBorder};
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.18);
   }
-  .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
-  .brand { font-weight: 700; font-size: 14px; letter-spacing: -0.02em; }
-  .brand span { color: #DC2626; }
-  .clock { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #525252; font-variant-numeric: tabular-nums; }
-  .hero { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 14px; border-bottom: 1px solid #F0F0F0; margin-bottom: 14px; }
-  .day-num { font-size: 46px; font-weight: 700; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .brand { font-weight: 700; font-size: 13.5px; letter-spacing: -0.02em; }
+  .brand span { color: #F04422; }
+  .clock { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: ${textMuted}; font-variant-numeric: tabular-nums; }
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid ${divider}; margin-bottom: 12px; }
+  .day-num { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
   .meta { text-align: right; }
-  .weekday { font-size: 13px; font-weight: 600; color: #DC2626; text-transform: uppercase; letter-spacing: 0.06em; }
-  .month-year { font-size: 13px; color: #525252; margin-top: 2px; }
-  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-size: 11px; margin-bottom: 16px; }
-  .dow { color: #A3A3A3; font-weight: 600; padding-bottom: 4px; }
-  .cell { padding: 6px 0; border-radius: 8px; font-variant-numeric: tabular-nums; color: #262626; }
-  .cell.muted { color: #D4D4D4; }
-  .cell.today { background: #171717; color: #FFFFFF; font-weight: 700; }
+  .weekday { font-size: 12px; font-weight: 600; color: #F04422; text-transform: uppercase; letter-spacing: 0.06em; }
+  .month-year { font-size: 12.5px; color: ${textMuted}; margin-top: 2px; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: 11px; margin-bottom: 14px; }
+  .dow { color: ${textMuted}; font-weight: 600; padding-bottom: 4px; }
+  .cell { padding: 5px 0; border-radius: 7px; font-variant-numeric: tabular-nums; color: ${textPrimary}; }
+  .cell.muted { color: ${cellMuted}; }
+  .cell.today { background: ${todayBg}; color: ${todayText}; font-weight: 700; }
   .actions { display: flex; gap: 8px; }
-  .btn { flex: 1; text-align: center; text-decoration: none; padding: 10px 12px; border-radius: 10px; font-size: 12px; font-weight: 600; }
-  .btn-primary { background: #171717; color: #FFFFFF; }
-  .btn-secondary { background: #F5F5F5; color: #262626; border: 1px solid #E5E5E5; }
+  .btn { flex: 1; text-align: center; text-decoration: none; padding: 9px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .btn-primary { background: ${btnPrimaryBg}; color: ${btnPrimaryText}; }
+  .btn-secondary { background: ${btnSecBg}; color: ${textPrimary}; border: 1px solid ${cardBorder}; }
 </style>
 </head>
 <body>
   <div class="widget">
     <div class="top">
-      <div class="brand">calendar<span>.q</span></div>
+      <div class="brand">Calander<span>.Q</span></div>
       <div class="clock" id="clock">--:--</div>
     </div>
     <div class="hero">
@@ -488,8 +573,8 @@ export function downloadStandaloneWidgetHtml(
     </div>
     <div class="grid" id="grid"></div>
     <div class="actions">
-      <a class="btn btn-primary" href="${appUrl}" target="_blank" rel="noopener">Open Full Calendar</a>
-      <a class="btn btn-secondary" href="${widgetLiveUrl}" target="_blank" rel="noopener">Live Widget</a>
+      <a class="btn btn-primary" href="${appUrl}" target="_blank" rel="noopener">Open Calander.Q</a>
+      ${darkTheme ? '' : `<a class="btn btn-secondary" href="${widgetLiveUrl}" target="_blank" rel="noopener">Live Widget</a>`}
     </div>
   </div>
 <script>
@@ -529,8 +614,20 @@ setInterval(render, 1000);
 </script>
 </body>
 </html>`;
+}
+
+/**
+ * Generates and downloads a crisp self-contained Desktop or Mobile Widget HTML file
+ * that works offline, shows live clock, month calendar, local date, and opens Calander.Q.
+ */
+export function downloadStandaloneWidgetHtml(
+  mode: 'desktop' | 'mobile',
+  widgetLiveUrl: string,
+  appUrl: string
+) {
+  const html = buildStandaloneWidgetDocument(mode, widgetLiveUrl, appUrl, false);
   triggerFileDownload(
-    isMobile ? 'calendar-q-mobile-widget.html' : 'calendar-q-desktop-widget.html',
+    mode === 'mobile' ? 'calendar-q-mobile-widget.html' : 'calendar-q-desktop-widget.html',
     html,
     'text/html;charset=utf-8'
   );

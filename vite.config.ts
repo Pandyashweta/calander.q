@@ -19,29 +19,24 @@ export default defineConfig(() => {
           'apple-touch-icon.png',
           'android-chrome-192x192.png',
           'android-chrome-512x512.png',
-          'pwa-192x192.png',
-          'pwa-256x256.png',
-          'pwa-384x384.png',
-          'pwa-512x512.png',
-          'pwa-maskable-192x192.png',
-          'pwa-maskable-512x512.png',
-          'icon.svg',
+          'widgets/calendar-template.json',
+          'sw-widgets.js',
         ],
         manifest: {
           id: '/',
           lang: 'en',
           dir: 'ltr',
-          name: 'calendar.q — Universal Calendar',
-          short_name: 'calendar.q',
+          name: 'Calander.Q — Universal Calendar',
+          short_name: 'Calander.Q',
           description:
-            'Universal calendar platform with 33 world calendars, local-first accounts, regional holidays, weather, and astronomy.',
+            'Universal calendar platform with 33 world calendars, regional holidays, weather, and astronomy.',
           start_url: '/?open=calendar',
           scope: '/',
           display: 'standalone',
           display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
           orientation: 'any',
-          theme_color: '#09090B',
-          background_color: '#09090B',
+          theme_color: '#0A0908',
+          background_color: '#0A0908',
           prefer_related_applications: false,
           categories: ['productivity', 'utilities'],
           launch_handler: {
@@ -52,55 +47,31 @@ export default defineConfig(() => {
           },
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: '/android-chrome-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-256x256.png',
-              sizes: '256x256',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-384x384.png',
-              sizes: '384x384',
-              type: 'image/png',
-              purpose: 'any',
-            },
-            {
-              src: '/pwa-512x512.png',
+              src: '/android-chrome-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-192x192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'maskable',
-            },
-            {
-              src: '/pwa-maskable-512x512.png',
+              src: '/android-chrome-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
-            },
-            {
-              src: '/icon.svg',
-              sizes: 'any',
-              type: 'image/svg+xml',
-              purpose: 'any',
             },
           ],
           screenshots: [
             {
-              src: '/screenshots/workspace-month.png',
-              sizes: '2880x1800',
+              src: '/screenshots/workspace-month-dark.png',
+              sizes: '1440x900',
               type: 'image/png',
               form_factor: 'wide',
-              label: 'Full-month calendar workspace with local holidays',
+              label: 'Full-month calendar workspace with regional holidays',
             },
             {
               src: '/screenshots/widget-mobile.png',
@@ -118,7 +89,7 @@ export default defineConfig(() => {
               url: '/?open=calendar',
               icons: [
                 {
-                  src: '/pwa-192x192.png',
+                  src: '/android-chrome-192x192.png',
                   sizes: '192x192',
                   type: 'image/png',
                 },
@@ -131,7 +102,7 @@ export default defineConfig(() => {
               url: '/?widget=desktop&embed=1',
               icons: [
                 {
-                  src: '/pwa-192x192.png',
+                  src: '/android-chrome-192x192.png',
                   sizes: '192x192',
                   type: 'image/png',
                 },
@@ -144,7 +115,7 @@ export default defineConfig(() => {
               url: '/?widget=mobile&embed=1',
               icons: [
                 {
-                  src: '/pwa-192x192.png',
+                  src: '/android-chrome-192x192.png',
                   sizes: '192x192',
                   type: 'image/png',
                 },
@@ -154,28 +125,28 @@ export default defineConfig(() => {
           // W3C / Windows 11 Native PWA Widgets Board declaration
           widgets: [
             {
-              name: 'calendar.q Today & Month',
-              short_name: 'calendar.q',
+              name: 'Calander.Q Today & Month',
+              short_name: 'Calander.Q',
               tag: 'calendar-q-today',
-              description: 'Glanceable today card, local holidays, and quick jump into calendar.q.',
+              description: 'Glanceable today card, regional holidays, and quick jump into Calander.Q.',
               ms_ac_template: '/widgets/calendar-template.json',
               data: '/api/widget-data',
               type: 'application/json',
               screenshots: [
                 {
-                  src: '/screenshots/widget-desktop.png',
-                  sizes: '2880x1800',
-                  label: 'calendar.q Desktop Widget',
+                  src: '/screenshots/widget-desktop-dark.png',
+                  sizes: '1440x900',
+                  label: 'Calander.Q Desktop Widget',
                 },
               ],
               icons: [
                 {
-                  src: '/pwa-192x192.png',
+                  src: '/android-chrome-192x192.png',
                   sizes: '192x192',
                   type: 'image/png',
                 },
                 {
-                  src: '/pwa-512x512.png',
+                  src: '/android-chrome-512x512.png',
                   sizes: '512x512',
                   type: 'image/png',
                 },
@@ -186,10 +157,11 @@ export default defineConfig(() => {
           ],
         } as Record<string, unknown>,
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          importScripts: ['/sw-widgets.js'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
           globIgnores: ['screenshots/**', 'videos/**', 'assets/aistudio/**'],
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallbackDenylist: [/^\/api\//, /^\/downloads\//],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
