@@ -220,12 +220,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const renderLayerIcon = (icon?: CalendarLayer['icon']) => {
-    if (icon === 'plane') return <Plane className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
-    if (icon === 'check') return <CheckCircle2 className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
-    if (icon === 'calendar') return <Calendar className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
-    if (icon === 'cake') return <Cake className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
-    if (icon === 'flower') return <Flower2 className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
-    if (icon === 'briefcase') return <Briefcase className="w-3.5 h-3.5 text-[#525252] shrink-0" />;
+    if (icon === 'plane') return <Plane className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
+    if (icon === 'check') return <CheckCircle2 className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
+    if (icon === 'calendar') return <Calendar className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
+    if (icon === 'cake') return <Cake className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
+    if (icon === 'flower') return <Flower2 className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
+    if (icon === 'briefcase') return <Briefcase className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA] shrink-0" />;
     return null;
   };
 
@@ -235,23 +235,27 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     <aside
       className={
         isDrawer
-          ? 'fixed inset-y-0 left-0 z-50 w-[min(86vw,272px)] h-full bg-[#FBFBFB] border-r border-[#EBEBEB] shadow-2xl flex flex-col select-none'
-          : 'w-[248px] shrink-0 h-full bg-[#FBFBFB] border-r border-[#EBEBEB] flex flex-col select-none'
+          ? 'fixed inset-y-0 left-0 z-50 w-[min(86vw,272px)] h-full bg-[#FBFBFB] dark:bg-[#111114] border-r border-[#EBEBEB] dark:border-[#242429] shadow-2xl flex flex-col select-none transition-colors'
+          : 'w-[248px] shrink-0 h-full bg-[#FBFBFB] dark:bg-[#111114] border-r border-[#EBEBEB] dark:border-[#242429] flex flex-col select-none transition-colors'
       }
     >
       {/* Top Window Chrome & Sidebar Toggle */}
       <div className="h-[44px] px-3.5 flex items-center justify-between shrink-0">
         {isDrawer ? (
           <div className="flex items-center gap-2">
-            <img src="/icon.svg" alt="" className="w-4 h-4 rounded-[4px]" />
-            <span className="text-[13.5px] font-semibold text-[#1A1A1A] tracking-tight">
+            <span className="w-6 h-6 rounded-[6px] overflow-hidden bg-black flex items-center justify-center shrink-0">
+              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
+            </span>
+            <span className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] tracking-tight">
               calendar<span className="text-[#DC2626]">.q</span>
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <img src="/icon.svg" alt="" className="w-[18px] h-[18px] rounded-[4px]" />
-            <span className="text-[13.5px] font-semibold text-[#1A1A1A] tracking-tight">
+            <span className="w-6 h-6 rounded-[6px] overflow-hidden bg-black flex items-center justify-center shrink-0">
+              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
+            </span>
+            <span className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] tracking-tight">
               calendar<span className="text-[#DC2626]">.q</span>
             </span>
           </div>
@@ -264,7 +268,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onClick={onCollapseSidebar}
               title="Collapse sidebar ([)"
               aria-label="Collapse sidebar"
-              className="p-1 rounded-md text-[#787878] hover:text-[#1F1F1F] hover:bg-[#EFEFEF] transition-colors cursor-pointer"
+              className="p-1 rounded-md text-[#787878] dark:text-[#A1A1AA] hover:text-[#1F1F1F] dark:hover:text-white hover:bg-[#EFEFEF] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
             >
               <PanelLeft className="w-[15px] h-[15px]" strokeWidth={1.75} />
             </button>
@@ -274,7 +278,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             onClick={() => onOpenSettings('festivals')}
             title="Calendar Settings"
             aria-label="Open calendar settings"
-            className="p-1.5 rounded-md text-[#787878] hover:text-[#1F1F1F] hover:bg-[#EFEFEF] transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-[#787878] dark:text-[#A1A1AA] hover:text-[#1F1F1F] dark:hover:text-white hover:bg-[#EFEFEF] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
           >
             <SlidersHorizontal className="w-[14px] h-[14px]" />
           </button>
@@ -283,7 +287,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               type="button"
               onClick={onCollapseSidebar}
               aria-label="Close sidebar"
-              className="p-1.5 rounded-md text-[#787878] hover:text-[#1F1F1F] hover:bg-[#EFEFEF] transition-colors cursor-pointer"
+              className="p-1.5 rounded-md text-[#787878] dark:text-[#A1A1AA] hover:text-[#1F1F1F] dark:hover:text-white hover:bg-[#EFEFEF] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -294,7 +298,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       {/* Mini Calendar */}
       <div className="px-3.5 pt-1 pb-3.5 shrink-0">
         <div className="flex items-center justify-between mb-2 px-0.5">
-          <span className="text-[12px] font-medium text-[#525252] tracking-tight">
+          <span className="text-[12px] font-medium text-[#525252] dark:text-[#D4D4D8] tracking-tight">
             {MONTH_NAMES[miniMonthOffset.month]} {miniMonthOffset.year}
           </span>
           <div className="flex items-center gap-0.5">
@@ -302,7 +306,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               type="button"
               onClick={handleMiniPrev}
               aria-label="Previous month"
-              className="p-1 rounded hover:bg-[#ECECEC] text-[#7A7A7A] hover:text-[#1F1F1F] transition-colors cursor-pointer"
+              className="p-1 rounded hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1F1F1F] dark:hover:text-white transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -310,7 +314,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               type="button"
               onClick={handleMiniNext}
               aria-label="Next month"
-              className="p-1 rounded hover:bg-[#ECECEC] text-[#7A7A7A] hover:text-[#1F1F1F] transition-colors cursor-pointer"
+              className="p-1 rounded hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1F1F1F] dark:hover:text-white transition-colors cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -321,7 +325,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           {DAY_NAMES_MINI.map((d) => (
             <div
               key={d}
-              className="text-center text-[10.5px] font-medium text-[#8E8E8E] py-0.5"
+              className="text-center text-[10.5px] font-medium text-[#8E8E8E] dark:text-[#71717A] py-0.5"
             >
               {d}
             </div>
@@ -343,10 +347,10 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
             let rangeBgClass = '';
             if (inRange) {
-              if (!prevInRange && !nextInRange) rangeBgClass = 'bg-[#EAEAEA] rounded-[6px]';
-              else if (!prevInRange && nextInRange) rangeBgClass = 'bg-[#EAEAEA] rounded-l-[6px]';
-              else if (prevInRange && !nextInRange) rangeBgClass = 'bg-[#EAEAEA] rounded-r-[6px]';
-              else rangeBgClass = 'bg-[#EAEAEA]';
+              if (!prevInRange && !nextInRange) rangeBgClass = 'bg-[#EAEAEA] dark:bg-[#24242C] rounded-[6px]';
+              else if (!prevInRange && nextInRange) rangeBgClass = 'bg-[#EAEAEA] dark:bg-[#24242C] rounded-l-[6px]';
+              else if (prevInRange && !nextInRange) rangeBgClass = 'bg-[#EAEAEA] dark:bg-[#24242C] rounded-r-[6px]';
+              else rangeBgClass = 'bg-[#EAEAEA] dark:bg-[#24242C]';
             }
 
             return (
@@ -361,8 +365,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                     isToday
                       ? 'bg-[#DC2626] text-white font-semibold shadow-xs'
                       : isCurrentMonth
-                      ? 'text-[#1F1F1F] hover:bg-[#E2E2E2] font-medium'
-                      : 'text-[#BDBDBD] hover:bg-[#EFEFEF]'
+                      ? 'text-[#1F1F1F] dark:text-[#E4E4E7] hover:bg-[#E2E2E2] dark:hover:bg-[#272730] font-medium'
+                      : 'text-[#BDBDBD] dark:text-[#52525B] hover:bg-[#EFEFEF] dark:hover:bg-[#1C1C22]'
                   }`}
                 >
                   {day.getDate()}
@@ -374,22 +378,22 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       </div>
 
       {/* Organized Calendar Sections */}
-      <div className="flex-1 overflow-y-auto cal-scroll border-t border-[#EBEBEB]">
+      <div className="flex-1 overflow-y-auto cal-scroll border-t border-[#EBEBEB] dark:border-[#242429]">
         {/* ================= SECTION 1: HOLIDAYS & FESTIVALS (ONLY HOLIDAYS + INDIAN FESTIVALS) ================= */}
         <div className="px-3.5 py-3">
           <div className="flex items-center justify-between gap-2 mb-2">
             <button
               type="button"
               onClick={() => toggleGroupCollapse('cultural-festivals')}
-              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] cursor-pointer group/title"
+              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer group/title"
               aria-expanded={!collapsedGroups['cultural-festivals']}
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 text-[#8C8C8C] group-hover/title:text-[#1A1A1A] transition-transform duration-200 shrink-0 ${
+                className={`w-3.5 h-3.5 text-[#8C8C8C] dark:text-[#71717A] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-transform duration-200 shrink-0 ${
                   collapsedGroups['cultural-festivals'] ? '-rotate-90' : 'rotate-0'
                 }`}
               />
-              <span className="text-[11.5px] font-semibold text-[#6B6B6B] group-hover/title:text-[#1A1A1A] transition-colors truncate">
+              <span className="text-[11.5px] font-semibold text-[#6B6B6B] dark:text-[#A1A1AA] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-colors truncate">
                 Holidays &amp; Festivals
               </span>
             </button>
@@ -398,7 +402,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               type="button"
               onClick={() => onOpenSettings('festivals')}
               title="Change holiday region in Settings"
-              className="text-[10.5px] font-medium text-[#737373] hover:text-[#1A1A1A] cursor-pointer truncate max-w-[82px]"
+              className="text-[10.5px] font-medium text-[#737373] dark:text-[#71717A] hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer truncate max-w-[82px]"
             >
               {getRegionLabel(holidayRegion)}
             </button>
@@ -415,7 +419,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 return (
                   <div
                     key={layer.id}
-                    className="group flex items-center justify-between gap-1.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] transition-colors"
+                    className="group flex items-center justify-between gap-1.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22] transition-colors"
                   >
                     <button
                       type="button"
@@ -441,8 +445,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       <span
                         className={`text-[12.5px] truncate transition-colors ${
                           layer.visible
-                            ? 'text-[#1F1F1F] font-medium'
-                            : 'text-[#8C8C8C] font-normal'
+                            ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                            : 'text-[#8C8C8C] dark:text-[#71717A] font-normal'
                         }`}
                       >
                         {displayName}
@@ -456,20 +460,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         </div>
 
         {/* ================= SECTION 2: MY CALENDARS (LOCAL) ================= */}
-        <div className="px-3.5 py-3 border-t border-[#EFEFEF]">
+        <div className="px-3.5 py-3 border-t border-[#EFEFEF] dark:border-[#242429]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <button
               type="button"
               onClick={() => toggleGroupCollapse('local-calendars')}
-              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] cursor-pointer group/title"
+              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer group/title"
               aria-expanded={!collapsedGroups['local-calendars']}
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 text-[#8C8C8C] group-hover/title:text-[#1A1A1A] transition-transform duration-200 shrink-0 ${
+                className={`w-3.5 h-3.5 text-[#8C8C8C] dark:text-[#71717A] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-transform duration-200 shrink-0 ${
                   collapsedGroups['local-calendars'] ? '-rotate-90' : 'rotate-0'
                 }`}
               />
-              <span className="text-[11.5px] font-semibold text-[#6B6B6B] group-hover/title:text-[#1A1A1A] transition-colors truncate">
+              <span className="text-[11.5px] font-semibold text-[#6B6B6B] dark:text-[#A1A1AA] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-colors truncate">
                 My Calendars
               </span>
             </button>
@@ -479,21 +483,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onClick={() => setShowAddCustom((v) => !v)}
               title="Add custom local calendar"
               aria-label="Add custom local calendar"
-              className="p-1 rounded text-[#7A7A7A] hover:text-[#1A1A1A] hover:bg-[#ECECEC] transition-colors cursor-pointer"
+              className="p-1 rounded text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {showAddCustom && (
-            <div className="mb-2.5 p-2 rounded-lg bg-white border border-[#E2E2E2] shadow-xs space-y-2">
+            <div className="mb-2.5 p-2 rounded-lg bg-white dark:bg-[#18181D] border border-[#E2E2E2] dark:border-[#2C2C34] shadow-xs space-y-2">
               <input
                 type="text"
                 value={customCalName}
                 onChange={(e) => setCustomCalName(e.target.value)}
                 placeholder="New calendar name..."
                 autoFocus
-                className="w-full bg-[#FAFAFA] border border-[#DCDCDC] rounded px-2 py-1 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                className="w-full bg-[#FAFAFA] dark:bg-[#111114] border border-[#DCDCDC] dark:border-[#2E2E36] rounded px-2 py-1 text-[12px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#3B9AE1]"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && customCalName.trim() && onAddCustomCalendar) {
                     onAddCustomCalendar(customCalName.trim(), customCalColor);
@@ -513,7 +517,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         type="button"
                         onClick={() => setCustomCalColor(col)}
                         className={`w-3.5 h-3.5 rounded-full transition-transform cursor-pointer ${
-                          customCalColor === col ? 'scale-125 ring-2 ring-offset-1 ring-[#1A1A1A]' : 'opacity-80'
+                          customCalColor === col ? 'scale-125 ring-2 ring-offset-1 ring-[#1A1A1A] dark:ring-white dark:ring-offset-[#18181D]' : 'opacity-80'
                         }`}
                         style={{ backgroundColor: COLOR_THEMES[col].dot }}
                       />
@@ -524,7 +528,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowAddCustom(false)}
-                    className="px-2 py-0.5 text-[11px] text-[#737373] hover:text-[#1A1A1A] rounded cursor-pointer"
+                    className="px-2 py-0.5 text-[11px] text-[#737373] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white rounded cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -538,7 +542,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         setShowAddCustom(false);
                       }
                     }}
-                    className="px-2.5 py-0.5 bg-[#1A1A1A] text-white rounded text-[11px] font-medium hover:bg-[#333333] disabled:opacity-40 cursor-pointer"
+                    className="px-2.5 py-0.5 bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B] rounded text-[11px] font-medium hover:bg-[#333333] dark:hover:bg-white disabled:opacity-40 cursor-pointer"
                   >
                     Add
                   </button>
@@ -556,7 +560,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 return (
                   <div
                     key={layer.id}
-                    className="group flex items-center justify-between gap-1.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] transition-colors"
+                    className="group flex items-center justify-between gap-1.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22] transition-colors"
                   >
                     <button
                       type="button"
@@ -575,7 +579,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                             : `1.5px solid ${theme.dot}`,
                           boxShadow:
                             isActivePersonal && layer.visible
-                              ? `0 0 0 2px #FBFBFB, 0 0 0 3.5px ${theme.dot}`
+                              ? `0 0 0 1.5px ${theme.dot}`
                               : undefined,
                         }}
                       >
@@ -587,8 +591,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       <span
                         className={`text-[12.5px] truncate transition-colors ${
                           layer.visible
-                            ? 'text-[#1F1F1F] font-medium'
-                            : 'text-[#8C8C8C] font-normal'
+                            ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                            : 'text-[#8C8C8C] dark:text-[#71717A] font-normal'
                         }`}
                       >
                         {layer.name}
@@ -602,26 +606,26 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
         </div>
 
         {/* ================= SECTION 3: ORGANIZED WORLD CALENDARS (INC. GUJARATI TITHIS & WORLD FESTIVALS) ================= */}
-        <div className="px-3.5 py-3 border-t border-[#EFEFEF]">
+        <div className="px-3.5 py-3 border-t border-[#EFEFEF] dark:border-[#242429]">
           <div className="flex items-center justify-between gap-2 mb-2">
             <button
               type="button"
               onClick={() => toggleGroupCollapse('world-calendars')}
-              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] cursor-pointer group/title"
+              className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer group/title"
               aria-expanded={!collapsedGroups['world-calendars']}
             >
               <ChevronDown
-                className={`w-3.5 h-3.5 text-[#8C8C8C] group-hover/title:text-[#1A1A1A] transition-transform duration-200 shrink-0 ${
+                className={`w-3.5 h-3.5 text-[#8C8C8C] dark:text-[#71717A] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-transform duration-200 shrink-0 ${
                   collapsedGroups['world-calendars'] ? '-rotate-90' : 'rotate-0'
                 }`}
               />
-              <span className="text-[11.5px] font-semibold text-[#6B6B6B] group-hover/title:text-[#1A1A1A] transition-colors truncate">
+              <span className="text-[11.5px] font-semibold text-[#6B6B6B] dark:text-[#A1A1AA] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-colors truncate">
                 World Calendars
               </span>
             </button>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[10.5px] font-medium text-[#737373] tabular-nums">
+              <span className="text-[10.5px] font-medium text-[#737373] dark:text-[#71717A] tabular-nums">
                 {totalActiveWorld > 0 ? `${totalActiveWorld} on` : `${WORLD_CALENDAR_SYSTEMS.length}`}
               </span>
               <button
@@ -629,7 +633,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 onClick={() => onOpenSettings('world')}
                 title="Manage World Calendars in Settings"
                 aria-label="Configure World Calendars"
-                className="p-1 rounded text-[#7A7A7A] hover:text-[#1A1A1A] hover:bg-[#ECECEC] transition-colors cursor-pointer"
+                className="p-1 rounded text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
               >
                 <SlidersHorizontal className="w-3 h-3" />
               </button>
@@ -640,21 +644,21 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <div className="space-y-2.5">
               {/* Quick search inside World Calendars */}
               <div className="relative">
-                <Search className="w-3 h-3 text-[#9A9A9A] absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-3 h-3 text-[#9A9A9A] dark:text-[#71717A] absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={worldSearch}
                   onChange={(e) => setWorldSearch(e.target.value)}
                   placeholder="Filter calendars..."
-                  className="w-full bg-white border border-[#E4E4E4] rounded-md pl-6 pr-2 py-1 text-[11.5px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#3B9AE1]"
+                  className="w-full bg-white dark:bg-[#18181D] border border-[#E4E4E4] dark:border-[#2C2C34] rounded-md pl-6 pr-2 py-1 text-[11.5px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#3B9AE1]"
                 />
               </div>
 
-              {/* World Calendar Event & Tithi Overlays (Gujarati Calendar & Tithis, World Festivals, International Days) */}
+              {/* World Calendar Event & Tithi Overlays */}
               {(!cleanSearch ||
                 worldOverlayLayers.some((l) => l.name.toLowerCase().includes(cleanSearch))) && (
-                <div className="space-y-0.5 pb-2 border-b border-[#EFEFEF]">
-                  <div className="text-[10px] font-semibold text-[#9A9A9A] uppercase tracking-wider px-1 mb-1">
+                <div className="space-y-0.5 pb-2 border-b border-[#EFEFEF] dark:border-[#242429]">
+                  <div className="text-[10px] font-semibold text-[#9A9A9A] dark:text-[#71717A] uppercase tracking-wider px-1 mb-1">
                     Festivals &amp; Tithis
                   </div>
                   {worldOverlayLayers
@@ -664,7 +668,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       return (
                         <div
                           key={layer.id}
-                          className="group flex items-center justify-between gap-1.5 py-[4px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] transition-colors"
+                          className="group flex items-center justify-between gap-1.5 py-[4px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22] transition-colors"
                         >
                           <button
                             type="button"
@@ -687,8 +691,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                             <span
                               className={`text-[12px] truncate ${
                                 layer.visible
-                                  ? 'text-[#1F1F1F] font-medium'
-                                  : 'text-[#8C8C8C]'
+                                  ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                                  : 'text-[#8C8C8C] dark:text-[#71717A]'
                               }`}
                             >
                               {layer.name}
@@ -705,8 +709,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                               title="Switch Gujarati labels between English & ગુજરાતી"
                               className={`px-1.5 py-0.5 rounded text-[10px] font-medium border cursor-pointer shrink-0 ${
                                 gujaratiScript
-                                  ? 'bg-[#FEF5D9] border-[#E5C16C] text-[#7A4C00] font-gujarati'
-                                  : 'bg-white border-[#E2E2E2] text-[#666666]'
+                                  ? 'bg-[#FEF5D9] dark:bg-amber-950/60 border-[#E5C16C] dark:border-amber-700/60 text-[#7A4C00] dark:text-amber-300 font-gujarati'
+                                  : 'bg-white dark:bg-[#1C1C22] border-[#E2E2E2] dark:border-[#2E2E36] text-[#666666] dark:text-[#A1A1AA]'
                               }`}
                             >
                               {gujaratiScript ? 'ગુજ' : 'En'}
@@ -741,19 +745,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       <button
                         type="button"
                         onClick={() => toggleWorldCategory(grp.id)}
-                        className="w-full flex items-center justify-between gap-1.5 py-1 px-1 -mx-1 rounded hover:bg-[#EFEFEF] text-left cursor-pointer"
+                        className="w-full flex items-center justify-between gap-1.5 py-1 px-1 -mx-1 rounded hover:bg-[#EFEFEF] dark:hover:bg-[#1C1C22] text-left cursor-pointer"
                       >
                         <span className="flex items-center gap-1.5 min-w-0">
                           <ChevronRight
-                            className={`w-3 h-3 text-[#8C8C8C] transition-transform shrink-0 ${
+                            className={`w-3 h-3 text-[#8C8C8C] dark:text-[#71717A] transition-transform shrink-0 ${
                               isOpen ? 'rotate-90' : 'rotate-0'
                             }`}
                           />
-                          <span className="text-[11.5px] font-medium text-[#525252] truncate">
+                          <span className="text-[11.5px] font-medium text-[#525252] dark:text-[#D4D4D8] truncate">
                             {grp.label}
                           </span>
                         </span>
-                        <span className="text-[10px] text-[#9A9A9A] tabular-nums shrink-0">
+                        <span className="text-[10px] text-[#9A9A9A] dark:text-[#71717A] tabular-nums shrink-0">
                           {activeInGroup > 0
                             ? `${activeInGroup}/${groupSystems.length}`
                             : groupSystems.length}
@@ -761,7 +765,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                       </button>
 
                       {isOpen && (
-                        <div className="pl-3 mt-0.5 space-y-0.5 border-l border-[#ECECEC] ml-1.5">
+                        <div className="pl-3 mt-0.5 space-y-0.5 border-l border-[#ECECEC] dark:border-[#242429] ml-1.5">
                           {groupSystems.map((sys) => {
                             const isEnabled = enabledWorldSet.has(sys.id);
                             return (
@@ -769,7 +773,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                 key={sys.id}
                                 type="button"
                                 onClick={() => onToggleWorldCalendar?.(sys.id)}
-                                className="w-full flex items-center gap-2 py-[3.5px] px-1 rounded hover:bg-[#F0F0F0] text-left cursor-pointer"
+                                className="w-full flex items-center gap-2 py-[3.5px] px-1 rounded hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22] text-left cursor-pointer"
                               >
                                 <span
                                   className="w-[12px] h-[12px] rounded-[3px] flex items-center justify-center shrink-0 transition-all"
@@ -787,8 +791,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                 <span
                                   className={`text-[12px] truncate ${
                                     isEnabled
-                                      ? 'text-[#1F1F1F] font-medium'
-                                      : 'text-[#8C8C8C]'
+                                      ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                                      : 'text-[#8C8C8C] dark:text-[#71717A]'
                                   }`}
                                 >
                                   {sys.name}
@@ -812,20 +816,20 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           .map((group) => {
             const isCollapsed = Boolean(collapsedGroups[group.id]);
             return (
-              <div key={group.id} className="px-3.5 py-3 border-t border-[#EFEFEF]">
+              <div key={group.id} className="px-3.5 py-3 border-t border-[#EFEFEF] dark:border-[#242429]">
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <button
                     type="button"
                     onClick={() => toggleGroupCollapse(group.id)}
-                    className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] cursor-pointer group/title"
+                    className="flex items-center gap-1.5 min-w-0 text-left hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer group/title"
                     aria-expanded={!isCollapsed}
                   >
                     <ChevronDown
-                      className={`w-3.5 h-3.5 text-[#8C8C8C] group-hover/title:text-[#1A1A1A] transition-transform duration-200 shrink-0 ${
+                      className={`w-3.5 h-3.5 text-[#8C8C8C] dark:text-[#71717A] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-transform duration-200 shrink-0 ${
                         isCollapsed ? '-rotate-90' : 'rotate-0'
                       }`}
                     />
-                    <span className="text-[11.5px] font-semibold text-[#6B6B6B] group-hover/title:text-[#1A1A1A] transition-colors truncate">
+                    <span className="text-[11.5px] font-semibold text-[#6B6B6B] dark:text-[#A1A1AA] group-hover/title:text-[#1A1A1A] dark:group-hover/title:text-white transition-colors truncate">
                       {googleUser?.email || group.label}
                     </span>
                   </button>
@@ -838,7 +842,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         disabled={googleSyncing}
                         title="Sync Google Calendar"
                         aria-label="Sync Google Calendar"
-                        className="p-1 rounded hover:bg-[#ECECEC] text-[#7A7A7A] hover:text-[#1A1A1A] cursor-pointer"
+                        className="p-1 rounded hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer"
                       >
                         <RefreshCw
                           className={`w-3 h-3 ${googleSyncing ? 'animate-spin' : ''}`}
@@ -849,7 +853,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         onClick={onGoogleLogout}
                         title="Disconnect Google Calendar"
                         aria-label="Disconnect Google Calendar"
-                        className="p-1 rounded hover:bg-[#FDE2E4] text-[#7A7A7A] hover:text-[#8A1520] cursor-pointer"
+                        className="p-1 rounded hover:bg-[#FDE2E4] dark:hover:bg-red-950/60 text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#8A1520] dark:hover:text-red-300 cursor-pointer"
                       >
                         <LogOut className="w-3 h-3" />
                       </button>
@@ -866,12 +870,12 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                           disabled={googleSyncing}
                           compact
                         />
-                        <p className="text-[11px] text-[#8C8C8C] leading-snug">
+                        <p className="text-[11px] text-[#8C8C8C] dark:text-[#71717A] leading-snug">
                           Optional two-way Google Calendar sync.
                         </p>
                       </div>
                     ) : googleLayers.length === 0 ? (
-                      <div className="text-[11.5px] text-[#8C8C8C] py-1">
+                      <div className="text-[11.5px] text-[#8C8C8C] dark:text-[#71717A] py-1">
                         {googleSyncing ? 'Loading calendars...' : 'No calendars loaded yet.'}
                       </div>
                     ) : (
@@ -887,7 +891,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                                 onToggleLayer(layer.id);
                                 if (!layer.visible) onSetActiveCalendar(layer.id);
                               }}
-                              className="w-full flex items-center gap-2.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] text-left cursor-pointer"
+                              className="w-full flex items-center gap-2.5 py-[4.5px] px-1 -mx-1 rounded-md hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22] text-left cursor-pointer"
                             >
                               <span
                                 className="w-[13px] h-[13px] rounded-[3.5px] flex items-center justify-center shrink-0"
@@ -905,8 +909,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                               <span
                                 className={`text-[12.5px] truncate ${
                                   layer.visible
-                                    ? 'text-[#1F1F1F] font-medium'
-                                    : 'text-[#8C8C8C]'
+                                    ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                                    : 'text-[#8C8C8C] dark:text-[#71717A]'
                                 }`}
                               >
                                 {layer.name}
@@ -924,17 +928,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       </div>
 
       {/* Bottom Footer Actions */}
-      <div className="px-3.5 py-2.5 border-t border-[#EBEBEB] shrink-0 space-y-1.5">
+      <div className="px-3.5 py-2.5 border-t border-[#EBEBEB] dark:border-[#242429] shrink-0 space-y-1.5">
         <button
           type="button"
-          onClick={() => onOpenSettings('world')}
-          className="w-full py-1.5 px-2.5 rounded-md bg-white border border-[#E4E4E4] hover:bg-[#F3F3F3] text-[12px] font-medium text-[#3F3F3F] flex items-center justify-between gap-2 transition-colors cursor-pointer"
+          onClick={() => onOpenSettings('display')}
+          className="w-full py-1.5 px-2.5 rounded-md bg-white dark:bg-[#18181D] border border-[#E4E4E4] dark:border-[#2C2C34] hover:bg-[#F3F3F3] dark:hover:bg-[#23232A] text-[12px] font-medium text-[#3F3F3F] dark:text-[#F4F4F5] flex items-center justify-between gap-2 transition-colors cursor-pointer"
         >
           <span className="inline-flex items-center gap-1.5 truncate">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-[#737373] shrink-0" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#737373] dark:text-[#A1A1AA] shrink-0" />
             <span className="truncate">Settings</span>
           </span>
-          <span className="text-[11px] text-[#7A7A7A] tabular-nums shrink-0">
+          <span className="text-[11px] text-[#7A7A7A] dark:text-[#71717A] tabular-nums shrink-0">
             {enabledWorldCount}/{WORLD_CALENDAR_SYSTEMS.length}
           </span>
         </button>
@@ -943,7 +947,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <button
             type="button"
             onClick={onOpenDownloadHub}
-            className="w-full py-1.5 px-2.5 rounded-md hover:bg-[#EFEFEF] text-[11.5px] font-medium text-[#666666] hover:text-[#1A1A1A] flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="w-full py-1.5 px-2.5 rounded-md hover:bg-[#EFEFEF] dark:hover:bg-[#1C1C22] text-[11.5px] font-medium text-[#666666] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Desktop &amp; Mobile Widgets</span>

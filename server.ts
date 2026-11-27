@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
+import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import * as authService from './server/authService.ts';
@@ -34,6 +35,7 @@ function isQuotaError(status: number, payload: unknown): boolean {
 
 async function startServer() {
   const app = express();
+  const httpServer = http.createServer(app);
   app.use(express.json());
 
   // Helper to extract session user from header
@@ -666,10 +668,75 @@ async function startServer() {
     });
   });
 
+  // Live data feed for Windows 11 PWA Widgets Board & external OS home-screen widgets
+  app.get('/api/widget-data', (req, res) => {
+    const now = new Date();
+    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+    const host = req.headers.host || `localhost:${PORT}`;
+    const appUrl = `${proto}://${host}/?open=calendar`;
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json({
+      day: String(now.getDate()),
+      weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
+      monthYear: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      isoDate: now.toISOString().slice(0, 10),
+      summary: '33 World Calendars · Local-first',
+      appUrl,
+    });
+  });
+
+  // Landing page waitlist sign-up endpoint
+  app.post('/api/waitlist', (req, res) => {
+    try {
+      const rawEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+      if (!rawEmail || !emailRegex.test(rawEmail) || rawEmail.length > 254) {
+        res.status(400).json({ error: { message: 'Please enter a valid email address.' } });
+        return;
+      }
+
+      const dataDir = path.resolve(__dirname, 'data');
+      const waitlistFile = path.join(dataDir, 'waitlist.json');
+      fs.mkdirSync(dataDir, { recursive: true });
+
+      let entries: Array<{ email: string; joinedAt: string }> = [];
+      if (fs.existsSync(waitlistFile)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(waitlistFile, 'utf8'));
+          if (Array.isArray(parsed)) entries = parsed;
+        } catch {
+          entries = [];
+        }
+      }
+
+      const alreadyJoined = entries.some((entry) => entry.email === rawEmail);
+      if (!alreadyJoined) {
+        entries.push({ email: rawEmail, joinedAt: new Date().toISOString() });
+        fs.writeFileSync(waitlistFile, JSON.stringify(entries, null, 2), 'utf8');
+      }
+
+      res.json({
+        success: true,
+        alreadyJoined,
+        email: rawEmail,
+      });
+    } catch (err) {
+      console.error('Waitlist signup error:', err);
+      res.status(500).json({ error: { message: 'Unable to save waitlist signup right now.' } });
+    }
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        allowedHosts: true,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : true,
+        ws: {
+          server: httpServer,
+        },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -683,7 +750,7 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`calendar.q server running on http://0.0.0.0:${PORT}`);
   });
 }

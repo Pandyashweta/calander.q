@@ -1,0 +1,68 @@
+{
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "ColumnSet",
+      "columns": [
+        {
+          "type": "Column",
+          "width": "stretch",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "${weekday}",
+              "weight": "Bolder",
+              "size": "Small",
+              "color": "Attention",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${day}",
+              "weight": "Bolder",
+              "size": "ExtraLarge",
+              "spacing": "None"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${monthYear}",
+              "size": "Small",
+              "isSubtle": true,
+              "spacing": "Small"
+            }
+          ]
+        },
+        {
+          "type": "Column",
+          "width": "auto",
+          "items": [
+            {
+              "type": "TextBlock",
+              "text": "calendar.q",
+              "weight": "Bolder",
+              "size": "Small",
+              "horizontalAlignment": "Right"
+            },
+            {
+              "type": "TextBlock",
+              "text": "${summary}",
+              "size": "Small",
+              "isSubtle": true,
+              "horizontalAlignment": "Right",
+              "wrap": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open calendar.q",
+      "url": "${appUrl}"
+    }
+  ]
+}

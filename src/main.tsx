@@ -1,6 +1,10 @@
 import { createRoot } from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
+
+// Register PWA Service Worker immediately so Chrome/Edge/Android enable native OS install
+registerSW({ immediate: true });
 
 // Tier 1 Google Maps Platform Demo Key quota & auth failure listener
 (window as unknown as { gm_authFailure?: () => void }).gm_authFailure = () => {

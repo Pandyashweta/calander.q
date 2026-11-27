@@ -173,17 +173,16 @@ function triggerFileDownload(filename: string, content: string, mimeType: string
 
 /**
  * Generates and downloads an OS-specific native app launcher file for Desktop,
- * or a standalone mobile widget file for iOS/Android.
+ * or a real OS Home Screen Widget script for iPhone / Android.
  */
 export function downloadPlatformAppLauncher(platform: DevicePlatform, appOrigin: string) {
   const cleanOrigin = appOrigin.replace(/\/$/, '');
   const calUrl = `${cleanOrigin}/?open=calendar`;
-  const widgetUrl = `${cleanOrigin}/?widget=${platform === 'ios' || platform === 'android' ? 'mobile' : 'desktop'}`;
 
   if (platform === 'macos') {
     const script = `#!/bin/bash
 # calendar.q — macOS Desktop App Launcher
-# Opens calendar.q in a dedicated borderless app window (Chrome/Edge/Brave/Safari)
+# Opens calendar.q in a dedicated standalone desktop window
 URL="${calUrl}"
 if [ -d "/Applications/Google Chrome.app" ]; then
   open -na "Google Chrome" --args --app="$URL" --window-size=1360,860
@@ -234,8 +233,187 @@ StartupNotify=true
     return;
   }
 
-  // Mobile standalone offline-capable widget/launcher HTML
-  downloadStandaloneWidgetHtml(platform === 'ios' ? 'mobile' : 'mobile', widgetUrl, calUrl);
+  if (platform === 'ios') {
+    downloadIosScriptableWidget(cleanOrigin);
+    return;
+  }
+
+  // Android: standalone offline-capable widget launcher
+  downloadStandaloneWidgetHtml('mobile', `${cleanOrigin}/?widget=mobile&embed=1`, calUrl);
+}
+
+/**
+ * Downloads a real native iOS Home Screen & Lock Screen Widget script for Scriptable.
+ * Users add this to their iPhone/iPad Home Screen (Small 2x2, Medium 4x2, or Large 4x4)
+ * outside the browser and tap it anytime to launch calendar.q.
+ */
+export function downloadIosScriptableWidget(appOrigin: string) {
+  const cleanOrigin = appOrigin.replace(/\/$/, '');
+  const calUrl = `${cleanOrigin}/?open=calendar`;
+  const script = `// calendar.q — Native iOS Home Screen Widget (for Scriptable)
+// How to add to your iPhone / iPad Home Screen:
+// 1. Install the free "Scriptable" app from the Apple App Store.
+// 2. Open this file in Scriptable (or paste into a new script named "calendar.q").
+// 3. Long-press your iPhone Home Screen -> tap "+" -> choose "Scriptable" -> pick Small, Medium, or Large.
+// 4. Tap the widget -> Edit Widget -> set Script to "calendar.q".
+
+const APP_URL = "${calUrl}";
+const now = new Date();
+const family = config.widgetFamily || "medium";
+
+const w = new ListWidget();
+w.url = APP_URL;
+w.backgroundColor = new Color("#0D0D10");
+w.setPadding(14, 16, 14, 16);
+
+const weekdayFmt = new DateFormatter();
+weekdayFmt.dateFormat = "EEEE";
+const monthFmt = new DateFormatter();
+monthFmt.dateFormat = "MMMM yyyy";
+
+const topRow = w.addStack();
+topRow.layoutHorizontally();
+topRow.centerAlignContent();
+
+const wd = topRow.addText(weekdayFmt.string(now).toUpperCase());
+wd.font = Font.boldSystemFont(11);
+wd.textColor = new Color("#F04422");
+
+topRow.addSpacer();
+
+const brand = topRow.addText("calendar.q");
+brand.font = Font.semiboldSystemFont(11);
+brand.textColor = new Color("#A1A1AA");
+
+w.addSpacer(4);
+
+const dateRow = w.addStack();
+dateRow.layoutHorizontally();
+dateRow.bottomAlignContent();
+
+const dayNum = dateRow.addText(String(now.getDate()));
+dayNum.font = Font.boldSystemFont(family === "small" ? 42 : 46);
+dayNum.textColor = Color.white();
+
+dateRow.addSpacer(10);
+
+const metaCol = dateRow.addStack();
+metaCol.layoutVertically();
+const mLabel = metaCol.addText(monthFmt.string(now));
+mLabel.font = Font.mediumSystemFont(13);
+mLabel.textColor = new Color("#D4D4D8");
+
+const sub = metaCol.addText("Tap to open full month");
+sub.font = Font.regularSystemFont(11);
+sub.textColor = new Color("#71717A");
+
+if (family === "large") {
+  w.addSpacer(12);
+  const days = ["S", "M", "T", "W", "T", "F", "S"];
+  const headerStack = w.addStack();
+  headerStack.layoutHorizontally();
+  for (const d of days) {
+    const cell = headerStack.addStack();
+    cell.size = new Size(38, 18);
+    cell.centerAlignContent();
+    const t = cell.addText(d);
+    t.font = Font.boldSystemFont(10);
+    t.textColor = new Color("#71717A");
+  }
+  const y = now.getFullYear(), m = now.getMonth(), todayD = now.getDate();
+  const firstDow = new Date(y, m, 1).getDay();
+  const totalDays = new Date(y, m + 1, 0).getDate();
+  let cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push("");
+  for (let d = 1; d <= totalDays; d++) cells.push(String(d));
+  while (cells.length % 7 !== 0) cells.push("");
+  for (let row = 0; row < cells.length; row += 7) {
+    const rStack = w.addStack();
+    rStack.layoutHorizontally();
+    for (let col = 0; col < 7; col++) {
+      const val = cells[row + col];
+      const cell = rStack.addStack();
+      cell.size = new Size(38, 22);
+      cell.centerAlignContent();
+      const t = cell.addText(val);
+      t.font = val === String(todayD) ? Font.boldSystemFont(12) : Font.regularSystemFont(11);
+      t.textColor = val === String(todayD) ? new Color("#F04422") : Color.white();
+    }
+  }
+}
+
+w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
+if (config.runsInWidget) {
+  Script.setWidget(w);
+} else {
+  w.presentMedium();
+}
+Script.complete();
+`;
+  triggerFileDownload('calendar-q-ios-widget.js', script, 'text/javascript;charset=utf-8');
+}
+
+/**
+ * Downloads a floating desktop widget launcher (frameless compact desktop window)
+ * for Windows, macOS, or Linux so the widget runs OUTSIDE the browser on the desktop.
+ */
+export function downloadFloatingDesktopWidget(
+  platform: 'windows' | 'macos' | 'linux',
+  appOrigin: string
+) {
+  const cleanOrigin = appOrigin.replace(/\/$/, '');
+  const embedUrl = `${cleanOrigin}/?widget=desktop&embed=1`;
+
+  if (platform === 'windows') {
+    const cmd = `@echo off
+REM calendar.q — Floating Windows Desktop Widget (380x480 chromeless window)
+set URL=${embedUrl}
+where msedge >nul 2>nul
+if %ERRORLEVEL%==0 (
+  start "" msedge --app="%URL%" --window-size=400,500 --window-position=40,40
+  exit /b
+)
+where chrome >nul 2>nul
+if %ERRORLEVEL%==0 (
+  start "" chrome --app="%URL%" --window-size=400,500 --window-position=40,40
+  exit /b
+)
+start "" "%URL%"
+`;
+    triggerFileDownload('calendar-q-windows-widget.cmd', cmd, 'text/plain;charset=utf-8');
+    return;
+  }
+
+  if (platform === 'macos') {
+    const cmd = `#!/bin/bash
+# calendar.q — Floating macOS Desktop Widget (compact chromeless window)
+URL="${embedUrl}"
+if [ -d "/Applications/Google Chrome.app" ]; then
+  open -na "Google Chrome" --args --app="$URL" --window-size=400,500 --window-position=40,60
+elif [ -d "/Applications/Microsoft Edge.app" ]; then
+  open -na "Microsoft Edge" --args --app="$URL" --window-size=400,500 --window-position=40,60
+elif [ -d "/Applications/Brave Browser.app" ]; then
+  open -na "Brave Browser" --args --app="$URL" --window-size=400,500 --window-position=40,60
+else
+  open "$URL"
+fi
+`;
+    triggerFileDownload('calendar-q-macos-widget.command', cmd, 'text/plain;charset=utf-8');
+    return;
+  }
+
+  const sh = `#!/usr/bin/env bash
+# calendar.q — Floating Linux Desktop Widget
+URL="${embedUrl}"
+if command -v google-chrome >/dev/null 2>&1; then
+  google-chrome --app="$URL" --window-size=400,500 &
+elif command -v chromium >/dev/null 2>&1; then
+  chromium --app="$URL" --window-size=400,500 &
+else
+  xdg-open "$URL" &
+fi
+`;
+  triggerFileDownload('calendar-q-linux-widget.sh', sh, 'text/plain;charset=utf-8');
 }
 
 /**

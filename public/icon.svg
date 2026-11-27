@@ -1,9 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="112" fill="#171717"/>
-  <rect x="88" y="104" width="336" height="312" rx="44" fill="#FFFFFF"/>
-  <path d="M88 148C88 123.699 107.699 104 132 104H380C404.301 104 424 123.699 424 148V192H88V148Z" fill="#DC2626"/>
-  <rect x="156" y="72" width="28" height="68" rx="14" fill="#E5E5E5"/>
-  <rect x="328" y="72" width="28" height="68" rx="14" fill="#E5E5E5"/>
-  <text x="256" y="346" text-anchor="middle" fill="#171717" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="164" font-weight="800" letter-spacing="-6">Q</text>
-  <circle cx="352" cy="340" r="18" fill="#DC2626"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="champagne" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFDF9"/>
+      <stop offset="50%" stop-color="#F0E5DA"/>
+      <stop offset="100%" stop-color="#D8C7B8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#050506"/>
+  <!-- Calendar body -->
+  <rect x="160" y="176" width="192" height="172" rx="34" fill="none" stroke="url(#champagne)" stroke-width="24"/>
+  <!-- Calendar top header bar -->
+  <path d="M160 210c0-18.8 15.2-34 34-34h124c18.8 0 34 15.2 34 34v18H160v-18z" fill="url(#champagne)"/>
+  <!-- Calendar binding rings -->
+  <rect x="202" y="146" width="24" height="52" rx="12" fill="url(#champagne)" stroke="#050506" stroke-width="8"/>
+  <rect x="286" y="146" width="24" height="52" rx="12" fill="url(#champagne)" stroke="#050506" stroke-width="8"/>
+  <!-- Four-point celestial star -->
+  <path d="M256 238 L266 266 L294 276 L266 286 L256 314 L246 286 L218 276 L246 266 Z" fill="url(#champagne)"/>
+  <!-- Orbital ring -->
+  <ellipse cx="256" cy="268" rx="156" ry="56" transform="rotate(-22 256 268)" fill="none" stroke="url(#champagne)" stroke-width="11" stroke-linecap="round"/>
+  <!-- Orbiting planet dot -->
+  <circle cx="378" cy="240" r="13" fill="url(#champagne)"/>
 </svg>

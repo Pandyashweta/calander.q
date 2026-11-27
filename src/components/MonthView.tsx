@@ -76,37 +76,44 @@ export const MonthView: React.FC<MonthViewProps> = ({
     [events, visibleLayerIds]
   );
 
-  const effectiveSubCal: WorldCalendarSystemId | 'none' =
-    headerSubCalendar === 'gujarati-vikram' && !showGujaratiCalendar
-      ? 'none'
-      : headerSubCalendar;
+  const activeWorldCalendarIds = useMemo(() => {
+    const list: WorldCalendarSystemId[] = [];
+    if (headerSubCalendar !== 'none') list.push(headerSubCalendar);
+    for (const id of enabledWorldCalendars) {
+      if (!list.includes(id)) list.push(id);
+    }
+    if (showGujaratiCalendar && !list.includes('gujarati-vikram')) {
+      list.push('gujarati-vikram');
+    }
+    return list;
+  }, [headerSubCalendar, enabledWorldCalendars, showGujaratiCalendar]);
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden select-none">
-      <div className="grid grid-cols-7 border-b border-[#EFEFEF] shrink-0 bg-white">
+    <div className="flex-1 flex flex-col min-w-0 h-full bg-[#F4F5F7] dark:bg-[#09090B] overflow-hidden select-none transition-colors duration-200">
+      {/* Clean unbordered weekday header aligned over elevated day cards */}
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-2 px-2 sm:px-3 pt-2.5 pb-1.5 shrink-0 bg-[#F4F5F7] dark:bg-[#09090B]">
         {DAY_NAMES_SHORT.map((d) => (
           <div
             key={d}
-            className="py-1.5 sm:py-2 px-1 sm:px-2.5 text-center sm:text-left text-[11px] sm:text-[11.5px] font-medium text-[#737373] border-l border-[#F4F4F4] first:border-l-0"
+            className="px-1.5 sm:px-2 text-center sm:text-left text-[11px] sm:text-[11.5px] font-semibold tracking-[0.01em] text-[#6B7280] dark:text-[#8E8E99]"
           >
             {isPhone ? d[0] : d}
           </div>
         ))}
       </div>
 
-      <div className="flex-1 grid grid-cols-7 grid-rows-6 min-h-0 overflow-hidden">
+      {/* Elevated Surface Card Month Grid — zero solid cell borders, uniform soft shadow */}
+      <div className="flex-1 grid grid-cols-7 grid-rows-6 gap-1.5 sm:gap-2 px-2 sm:px-3 pb-2.5 sm:pb-3 pt-0.5 min-h-0 overflow-hidden bg-[#F4F5F7] dark:bg-[#09090B]">
         {days.map((day) => {
           const dateKey = formatDateKey(day);
           const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
           const isToday = isSameDay(day, today);
           const panchang = getGujaratiPanchang(day);
-          const activeList =
-            enabledWorldCalendars.length > 0
-              ? enabledWorldCalendars
-              : effectiveSubCal !== 'none'
-              ? [effectiveSubCal]
-              : [];
-          const dayCalVals = getWorldCalendarsForDate(day, activeList, gujaratiScript);
+          const dayCalVals = getWorldCalendarsForDate(
+            day,
+            activeWorldCalendarIds,
+            gujaratiScript
+          );
 
           const festivals = getFestivalsForDate(day, visibleLayerIds, holidayRegion);
           const dayEvents = visibleEvents
@@ -130,21 +137,25 @@ export const MonthView: React.FC<MonthViewProps> = ({
             <div
               key={dateKey}
               onDoubleClick={() => onCreateEventOnDate(dateKey)}
-              className={`border-b border-l border-[#F1F1F1] first:border-l-0 p-0.5 sm:p-1.5 flex flex-col min-h-0 overflow-hidden transition-colors hover:bg-[#FAFAFA]/70 ${
-                !isCurrentMonth ? 'bg-[#FCFCFC]' : 'bg-white'
+              className={`rounded-[10px] sm:rounded-[12px] p-1 sm:p-2 flex flex-col min-h-0 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_3px_10px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.09)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.48),0_4px_12px_rgba(0,0,0,0.34)] dark:hover:shadow-[0_6px_18px_rgba(0,0,0,0.55)] transition-all duration-150 ${
+                isToday
+                  ? 'bg-white dark:bg-[#17171C] ring-1 ring-[#F04422]/30 dark:ring-[#F04422]/50'
+                  : isCurrentMonth
+                  ? 'bg-white dark:bg-[#131317]'
+                  : 'bg-[#F9FAFB]/90 dark:bg-[#0E0E12]'
               }`}
             >
-              <div className="flex items-start justify-between gap-0.5 sm:gap-1 mb-0.5 sm:mb-1 shrink-0">
+              <div className="flex items-start justify-between gap-0.5 sm:gap-1 mb-0.5 sm:mb-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => onZoomToDay(day)}
                   title="Open day view"
                   className={`text-[11px] sm:text-[12px] tabular-nums leading-none cursor-pointer transition-colors ${
                     isToday
-                      ? 'bg-[#F04422] text-white font-semibold px-[4px] sm:px-[5px] py-[2.5px] sm:py-[3px] rounded-[4px] sm:rounded-[5px]'
+                      ? 'bg-[#F04422] text-white font-semibold px-[5px] sm:px-[6px] py-[3px] rounded-[5px] sm:rounded-[6px]'
                       : isCurrentMonth
-                      ? 'text-[#1F1F1F] font-medium hover:bg-[#EFEFEF] px-1 py-0.5 rounded'
-                      : 'text-[#BDBDBD] px-1 py-0.5 rounded'
+                      ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-semibold hover:bg-[#F1F2F4] dark:hover:bg-[#23232A] px-1 py-0.5 rounded-[5px]'
+                      : 'text-[#B4B8C0] dark:text-[#52525B] font-medium hover:bg-[#EFEFF2] dark:hover:bg-[#1C1C22] px-1 py-0.5 rounded-[5px]'
                   }`}
                 >
                   {day.getDate()}

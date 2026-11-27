@@ -38,7 +38,21 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
   onOpenCalendar,
   onSwitchMode,
 }) => {
-  const [size, setSize] = useState<WidgetSize>(mode === 'mobile' ? 'medium' : 'large');
+  const initialEmbed =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('embed') === '1';
+  const initialSizeParam =
+    typeof window !== 'undefined'
+      ? (new URLSearchParams(window.location.search).get('size') as WidgetSize | null)
+      : null;
+
+  const [size, setSize] = useState<WidgetSize>(
+    initialSizeParam === 'small' || initialSizeParam === 'medium' || initialSizeParam === 'large'
+      ? initialSizeParam
+      : mode === 'mobile'
+      ? 'medium'
+      : 'large'
+  );
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -84,93 +98,108 @@ export const WidgetView: React.FC<WidgetViewProps> = ({
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
-    <div className="min-h-screen h-screen overflow-y-auto bg-[#F5F5F4] text-[#171717] flex flex-col">
-      {/* Compact Widget Toolbar */}
-      <header className="px-4 sm:px-6 py-3 bg-white border-b border-[#E5E5E5] flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <img src="/icon.svg" alt="" className="w-5 h-5 rounded-[5px]" />
-          <span className="text-[14px] font-bold tracking-tight">
-            calendar<span className="text-[#DC2626]">.q</span>
-          </span>
-          <span className="text-[12px] text-[#737373]">
-            · {mode === 'desktop' ? 'Desktop Widget' : 'Mobile Widget'}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-[#E2E2E2] bg-[#FAFAFA] p-0.5 text-[11.5px] font-medium">
-            <button
-              type="button"
-              onClick={() => onSwitchMode('desktop')}
-              className={`px-2.5 py-1 rounded-md inline-flex items-center gap-1 cursor-pointer ${
-                mode === 'desktop' ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5" />
-              <span>Desktop</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onSwitchMode('mobile')}
-              className={`px-2.5 py-1 rounded-md inline-flex items-center gap-1 cursor-pointer ${
-                mode === 'mobile' ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Mobile</span>
-            </button>
+    <div
+      className={`min-h-screen h-screen overflow-y-auto flex flex-col ${
+        initialEmbed ? 'bg-[#09090B] text-[#171717]' : 'bg-[#F5F5F4] text-[#171717]'
+      }`}
+    >
+      {/* Compact Widget Toolbar (hidden in pure chromeless ?embed=1 OS widget mode) */}
+      {!initialEmbed && (
+        <header className="px-4 sm:px-6 py-3 bg-white border-b border-[#E5E5E5] flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-[7px] overflow-hidden bg-black flex items-center justify-center shrink-0">
+              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
+            </span>
+            <span className="text-[14px] font-bold tracking-tight">
+              calendar<span className="text-[#DC2626]">.q</span>
+            </span>
+            <span className="text-[12px] text-[#737373]">
+              · {mode === 'desktop' ? 'Desktop Widget' : 'Mobile Widget'}
+            </span>
           </div>
 
-          <div className="inline-flex rounded-lg border border-[#E2E2E2] bg-[#FAFAFA] p-0.5 text-[11.5px] font-medium">
-            {(['small', 'medium', 'large'] as const).map((s) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex rounded-lg border border-[#E2E2E2] bg-[#FAFAFA] p-0.5 text-[11.5px] font-medium">
               <button
-                key={s}
                 type="button"
-                onClick={() => setSize(s)}
-                className={`px-2 py-1 rounded-md capitalize cursor-pointer ${
-                  size === s ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
+                onClick={() => onSwitchMode('desktop')}
+                className={`px-2.5 py-1 rounded-md inline-flex items-center gap-1 cursor-pointer ${
+                  mode === 'desktop' ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
                 }`}
               >
-                {s === 'small' ? '2×2' : s === 'medium' ? '4×2' : '4×4'}
+                <Monitor className="w-3.5 h-3.5" />
+                <span>Desktop</span>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => onSwitchMode('mobile')}
+                className={`px-2.5 py-1 rounded-md inline-flex items-center gap-1 cursor-pointer ${
+                  mode === 'mobile' ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Mobile</span>
+              </button>
+            </div>
+
+            <div className="inline-flex rounded-lg border border-[#E2E2E2] bg-[#FAFAFA] p-0.5 text-[11.5px] font-medium">
+              {(['small', 'medium', 'large'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSize(s)}
+                  className={`px-2 py-1 rounded-md capitalize cursor-pointer ${
+                    size === s ? 'bg-white text-[#171717] shadow-2xs' : 'text-[#737373]'
+                  }`}
+                >
+                  {s === 'small' ? '2×2' : s === 'medium' ? '4×2' : '4×4'}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                downloadStandaloneWidgetHtml(
+                  mode,
+                  `${origin}/?widget=${mode}&embed=1`,
+                  `${origin}/?open=calendar`
+                )
+              }
+              className="px-3 py-1.5 rounded-lg border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Save Offline Widget</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onOpenCalendar}
+              className="px-3 py-1.5 rounded-lg bg-[#171717] hover:bg-[#333333] text-white text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Open Full Calendar</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              downloadStandaloneWidgetHtml(
-                mode,
-                `${origin}/?widget=${mode}`,
-                `${origin}/?open=calendar`
-              )
-            }
-            className="px-3 py-1.5 rounded-lg border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Save Offline Widget</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenCalendar}
-            className="px-3 py-1.5 rounded-lg bg-[#171717] hover:bg-[#333333] text-white text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>Open Full Calendar</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Live Interactive Widget Canvas */}
-      <main className="flex-1 flex items-center justify-center p-6">
+      <main
+        className={`flex-1 flex items-center justify-center ${
+          initialEmbed ? 'p-3' : 'p-6'
+        }`}
+      >
         <div
-          className={`bg-white border border-[#E5E5E5] rounded-[24px] shadow-xl p-5 transition-all ${
-            size === 'small'
+          className={`bg-white rounded-[24px] shadow-xl p-5 transition-all ${
+            initialEmbed ? 'w-full h-full max-w-[440px] flex flex-col justify-between' : 'border border-[#E5E5E5]'
+          } ${
+            !initialEmbed &&
+            (size === 'small'
               ? 'w-[216px]'
               : size === 'medium'
               ? 'w-full max-w-[384px]'
-              : 'w-full max-w-[440px]'
+              : 'w-full max-w-[440px]')
           }`}
         >
           {/* Top Row */}

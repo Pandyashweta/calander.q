@@ -14,11 +14,13 @@ import {
   LocateFixed,
   LogOut,
   Monitor,
+  Moon,
   RefreshCw,
   Search,
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  Sun,
   Upload,
   X,
 } from 'lucide-react';
@@ -91,14 +93,14 @@ const SHORTCUT_CATEGORIES = [
     name: 'Navigation & Views',
     items: [
       { keys: ['T'], desc: 'Jump to Today' },
-      { keys: ['D'], desc: 'Switch to Day view' },
+      { keys: ['D', 'or', '1'], desc: 'Switch to Day view' },
       { keys: ['3'], desc: 'Switch to 3-Day view' },
       { keys: ['5'], desc: 'Switch to 5-Day view' },
       { keys: ['W'], desc: 'Switch to Week view' },
       { keys: ['M'], desc: 'Switch to Full Month view' },
       { keys: ['J', 'or', '→'], desc: 'Next period' },
       { keys: ['K', 'or', '←'], desc: 'Previous period' },
-      { keys: ['G'], desc: 'Go to Date / Festival jump' },
+      { keys: ['.'], desc: 'Go to Date / Festival jump' },
     ],
   },
   {
@@ -108,7 +110,8 @@ const SHORTCUT_CATEGORIES = [
       { keys: ['⌘/Ctrl', 'K'], desc: 'Open Command Menu & Search' },
       { keys: ['/'], desc: 'Quick search events & festivals' },
       { keys: ['⌘/Ctrl', 'E'], desc: 'Open .ics Calendar Sync in Settings' },
-      { keys: ['Esc'], desc: 'Close active dialog or menu' },
+      { keys: ['S'], desc: 'Toggle Share Availability mode' },
+      { keys: ['Esc'], desc: 'Close active dialog or clear selection' },
     ],
   },
   {
@@ -116,7 +119,10 @@ const SHORTCUT_CATEGORIES = [
     items: [
       { keys: ['['], desc: 'Toggle left sidebar' },
       { keys: [']'], desc: 'Toggle right panel' },
-      { keys: ['H'], desc: 'Toggle Holidays & Festivals' },
+      { keys: ['H'], desc: 'Toggle Holidays & Indian Festivals' },
+      { keys: ['G'], desc: 'Toggle Gujarati Calendar & Tithis' },
+      { keys: ['A'], desc: 'Open Astronomy Almanac' },
+      { keys: ['⌘/Ctrl', ','], desc: 'Open Calendar Settings' },
       { keys: ['?'], desc: 'Open Keyboard Shortcuts in Settings' },
     ],
   },
@@ -125,6 +131,8 @@ const SHORTCUT_CATEGORIES = [
 interface SettingsModalProps {
   open: boolean;
   initialTab?: SettingsTab;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
   anchorDate: Date;
   layers: CalendarLayer[];
   events: CalendarEvent[];
@@ -178,12 +186,14 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ checked, onChange, label })
     aria-label={label}
     onClick={onChange}
     className={`relative inline-flex h-[20px] w-[36px] shrink-0 items-center rounded-full transition-colors cursor-pointer ${
-      checked ? 'bg-[#1A1A1A]' : 'bg-[#D8D8D8]'
+      checked ? 'bg-[#1A1A1A] dark:bg-[#F4F4F5]' : 'bg-[#D8D8D8] dark:bg-[#32323B]'
     }`}
   >
     <span
-      className={`inline-block h-[16px] w-[16px] transform rounded-full bg-white shadow-xs transition-transform ${
-        checked ? 'translate-x-[18px]' : 'translate-x-[2px]'
+      className={`inline-block h-[16px] w-[16px] transform rounded-full shadow-xs transition-transform ${
+        checked
+          ? 'translate-x-[18px] bg-white dark:bg-[#09090B]'
+          : 'translate-x-[2px] bg-white dark:bg-[#A1A1AA]'
       }`}
     />
   </button>
@@ -198,7 +208,7 @@ export const GoogleSignInButton: React.FC<{
     type="button"
     onClick={onClick}
     disabled={disabled}
-    className={`w-full bg-white hover:bg-[#F8F9FA] active:bg-[#F1F3F4] border border-[#DADCE0] rounded-[6px] text-[#3C4043] font-medium flex items-center justify-center gap-2.5 transition-colors shadow-2xs cursor-pointer disabled:opacity-60 ${
+    className={`w-full bg-white dark:bg-[#1C1C22] hover:bg-[#F8F9FA] dark:hover:bg-[#24242C] active:bg-[#F1F3F4] border border-[#DADCE0] dark:border-[#32323B] rounded-[6px] text-[#3C4043] dark:text-[#F4F4F5] font-medium flex items-center justify-center gap-2.5 transition-colors shadow-2xs cursor-pointer disabled:opacity-60 ${
       compact ? 'h-[32px] px-2.5 text-[12px]' : 'h-[38px] px-4 text-[13px]'
     }`}
   >
@@ -234,6 +244,8 @@ export const GoogleSignInButton: React.FC<{
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   open,
   initialTab = 'festivals',
+  darkMode,
+  onToggleDarkMode,
   anchorDate,
   layers,
   events,
@@ -292,6 +304,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [exportSuccess, setExportSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const exportableLayers = useMemo(
+    () => layers.filter((l) => l.type === 'personal' || l.type === 'custom' || l.type === 'google'),
+    [layers]
+  );
+
   React.useEffect(() => {
     setCityDraft(weatherLocationQuery);
   }, [weatherLocationQuery]);
@@ -301,8 +318,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setTab(initialTab);
       setImportStatus(null);
       setExportSuccess(false);
+      setSelectedExportLayers(
+        new Set(
+          layers
+            .filter((l) => l.type === 'personal' || l.type === 'custom' || l.type === 'google')
+            .map((l) => l.id)
+        )
+      );
     }
-  }, [open, initialTab]);
+  }, [open, initialTab, layers]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -333,7 +357,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     () =>
       layers.filter(
         (l) =>
-          l.id === 'gujarati-calendar' ||
           l.id === 'world-observances' ||
           l.id === 'global-days'
       ),
@@ -367,7 +390,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [anchorDate, gujaratiScript, worldFilter]);
 
   const eventsToExport = useMemo(
-    () => events.filter((ev) => selectedExportLayers.size === 0 || selectedExportLayers.has(ev.calendarId)),
+    () => events.filter((ev) => selectedExportLayers.has(ev.calendarId)),
     [events, selectedExportLayers]
   );
 
@@ -426,36 +449,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[1px] flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/30 dark:bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="Calendar Settings"
-        className="w-full max-w-[820px] h-[min(85vh,660px)] bg-white border border-[#E2E2E2] rounded-xl shadow-xl flex flex-col overflow-hidden"
+        className="w-full max-w-[880px] h-[min(88vh,680px)] bg-white dark:bg-[#131317] border border-[#E2E2E2] dark:border-[#27272E] rounded-xl shadow-xl dark:shadow-[0_24px_60px_rgba(0,0,0,0.75)] flex flex-col overflow-hidden"
       >
         {/* Top Header */}
-        <div className="px-5 py-3.5 border-b border-[#EFEFEF] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4 text-[#525252]" />
-            <h2 className="text-[15px] font-semibold text-[#1A1A1A]">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-[#EFEFEF] dark:border-[#24242B] flex items-center justify-between gap-3 shrink-0 bg-white dark:bg-[#131317]">
+          <div className="flex items-center gap-2 min-w-0">
+            <SlidersHorizontal className="w-4 h-4 text-[#525252] dark:text-[#A1A1AA] shrink-0" />
+            <h2 className="text-[15px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
               Calendar Settings
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close settings"
-            className="p-1 rounded-md hover:bg-[#F2F2F2] text-[#7A7A7A] hover:text-[#1A1A1A] cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Global Dark Mode Quick Toggle in Settings Header */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={darkMode}
+              onClick={onToggleDarkMode}
+              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              className="h-[30px] px-2.5 rounded-lg border border-[#E4E4E4] dark:border-[#2E2E36] bg-[#FAFAFA] dark:bg-[#1C1C22] hover:bg-[#F2F2F2] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {darkMode ? (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-[#F4F4F5]" />
+                  <span>Dark Mode</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-[#D97706]" />
+                  <span>Light Mode</span>
+                </>
+              )}
+              <span
+                aria-hidden="true"
+                className={`ml-0.5 inline-flex h-[15px] w-[26px] items-center rounded-full transition-colors ${
+                  darkMode ? 'bg-[#F4F4F5]' : 'bg-[#D4D4D8]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-[11px] w-[11px] rounded-full transition-transform ${
+                    darkMode
+                      ? 'translate-x-[13px] bg-[#09090B]'
+                      : 'translate-x-[2px] bg-white'
+                  }`}
+                />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close settings"
+              className="p-1.5 rounded-md hover:bg-[#F2F2F2] dark:hover:bg-[#23232A] text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer shrink-0 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
-        <div className="flex-1 flex flex-col sm:flex-row min-h-0 overflow-hidden">
-          <nav className="sm:w-[204px] shrink-0 bg-[#FAFAFA] border-b sm:border-b-0 sm:border-r border-[#EFEFEF] p-2 sm:p-2.5 flex sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible cal-scroll">
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 overflow-hidden">
+          <nav className="md:w-[216px] shrink-0 bg-[#FAFAFA] dark:bg-[#0F0F13] border-b md:border-b-0 md:border-r border-[#EFEFEF] dark:border-[#24242B] p-2 md:p-2.5 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible md:overflow-y-auto cal-scroll">
             {(
               [
                 { id: 'festivals', label: 'Holidays & Local', icon: Sparkles },
@@ -475,10 +537,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => setTab(item.id)}
-                  className={`sm:w-full shrink-0 flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-lg text-[12px] sm:text-[12.5px] font-medium transition-colors text-left cursor-pointer whitespace-nowrap ${
+                  className={`md:w-full shrink-0 flex items-center gap-2 px-3 py-1.5 md:py-2 rounded-lg text-[12px] md:text-[12.5px] font-medium transition-colors text-left cursor-pointer whitespace-nowrap ${
                     active
-                      ? 'bg-white text-[#1A1A1A] shadow-2xs border border-[#E6E6E6]'
-                      : 'text-[#666666] hover:bg-[#F0F0F0] hover:text-[#1A1A1A] border border-transparent'
+                      ? 'bg-white dark:bg-[#1C1C22] text-[#1A1A1A] dark:text-[#F4F4F5] shadow-2xs border border-[#E6E6E6] dark:border-[#2E2E36]'
+                      : 'text-[#666666] dark:text-[#A1A1AA] hover:bg-[#F0F0F0] dark:hover:bg-[#18181E] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] border border-transparent'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -489,21 +551,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </nav>
 
           {/* Active Tab Panel */}
-          <div className="flex-1 overflow-y-auto cal-scroll p-4 sm:p-5">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden cal-scroll p-4 sm:p-6 bg-white dark:bg-[#131317] text-[#1A1A1A] dark:text-[#F4F4F5]">
             {/* ==================== TAB 1: HOLIDAYS & LOCAL ==================== */}
             {tab === 'festivals' && (
-              <div className="space-y-5">
-                <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#EFEFEF]">
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+              <div className="space-y-5 min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3 pb-4 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Holidays &amp; Indian Festivals
                     </h3>
-                    <p className="text-[12px] text-[#737373] mt-0.5">
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                       Holidays automatically match your local region. Gujarati Tithis and World Calendar Festivals live under World Calendars.
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-[12px] text-[#525252] font-medium">
+                    <span className="text-[12px] text-[#525252] dark:text-[#A1A1AA] font-medium">
                       {anyHolidayVisible ? 'Visible' : 'Hidden'}
                     </span>
                     <ToggleSwitch
@@ -515,19 +577,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Holiday Region Picker */}
-                <div className="p-3.5 rounded-lg bg-[#FAFAFA] border border-[#ECECEC] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                <div className="p-3.5 rounded-lg bg-[#FAFAFA] dark:bg-[#1A1A20] border border-[#ECECEC] dark:border-[#27272E] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12.5px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Local Holiday Region
                     </div>
-                    <div className="text-[11.5px] text-[#737373] mt-0.5">
+                    <div className="text-[11.5px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                       Detected from your device timezone. Switch country/region anytime.
                     </div>
                   </div>
                   <select
                     value={holidayRegion}
                     onChange={(e) => onSetHolidayRegion(e.target.value as HolidayRegionCode)}
-                    className="bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1] shrink-0"
+                    className="w-full sm:w-auto sm:min-w-[200px] max-w-full bg-white dark:bg-[#131317] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-2.5 py-1.5 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] focus:outline-none focus:border-[#3B9AE1] shrink-0"
                   >
                     {HOLIDAY_REGIONS.map((reg) => (
                       <option key={reg.code} value={reg.code}>
@@ -538,7 +600,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* ONLY Holidays & Indian Festivals */}
-                <div className="divide-y divide-[#F2F2F2]">
+                <div className="divide-y divide-[#F2F2F2] dark:divide-[#24242B]">
                   {holidayAndIndianLayers.map((layer) => {
                     const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.crimson;
                     return (
@@ -552,13 +614,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             style={{ backgroundColor: theme.dot }}
                           />
                           <div className="min-w-0">
-                            <div className="text-[13px] font-medium text-[#1A1A1A]">
+                            <div className="text-[13px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]">
                               {layer.id === 'national-holidays'
                                 ? `Local Holidays (${getRegionLabel(holidayRegion)})`
                                 : layer.name}
                             </div>
                             {layer.description && (
-                              <div className="text-[11.5px] text-[#7A7A7A] mt-0.5 leading-snug">
+                              <div className="text-[11.5px] text-[#7A7A7A] dark:text-[#A1A1AA] mt-0.5 leading-snug">
                                 {layer.description}
                               </div>
                             )}
@@ -576,14 +638,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Local Personal & Custom Calendar Categories */}
-                <div className="pt-4 border-t border-[#EFEFEF] space-y-2">
-                  <h4 className="text-[12.5px] font-semibold text-[#1A1A1A]">
+                <div className="pt-4 border-t border-[#EFEFEF] dark:border-[#24242B] space-y-2">
+                  <h4 className="text-[12.5px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                     My Local Calendars ({localLayers.length})
                   </h4>
-                  <p className="text-[11.5px] text-[#7A7A7A]">
+                  <p className="text-[11.5px] text-[#7A7A7A] dark:text-[#A1A1AA]">
                     Stored privately on this device. Enable any personal category when you need it.
                   </p>
-                  <div className="divide-y divide-[#F2F2F2]">
+                  <div className="divide-y divide-[#F2F2F2] dark:divide-[#24242B]">
                     {localLayers.map((layer) => {
                       const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.blue;
                       return (
@@ -596,7 +658,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               className="w-3 h-3 rounded-[3px] shrink-0"
                               style={{ backgroundColor: theme.dot }}
                             />
-                            <span className="text-[12.5px] font-medium text-[#1A1A1A]">
+                            <span className="text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]">
                               {layer.name}
                             </span>
                           </div>
@@ -615,33 +677,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* ==================== TAB 2: WORLD CALENDARS ==================== */}
             {tab === 'world' && (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF]">
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+              <div className="space-y-4 min-w-0">
+                <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       World Calendars ({enabledWorldCalendars.length} / {WORLD_CALENDAR_SYSTEMS.length} active)
                     </h3>
-                    <p className="text-[12px] text-[#737373] mt-0.5">
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5 leading-relaxed">
                       Live conversion for{' '}
-                      <span className="font-medium text-[#1A1A1A]">
+                      <span className="font-medium text-[#1A1A1A] dark:text-[#F4F4F5]">
                         {MONTH_NAMES[anchorDate.getMonth()]} {anchorDate.getDate()},{' '}
                         {anchorDate.getFullYear()}
                       </span>
-                      . Includes Gujarati Calendar &amp; Tithis and World Calendar Festivals.
+                      . Includes World Calendar Festivals and International Days.
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => onEnableAllWorldCalendars(true)}
-                      className="px-2 py-1 rounded border border-[#E2E2E2] text-[11px] font-medium text-[#4A4A4A] hover:bg-[#F5F5F5] cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-md border border-[#E2E2E2] dark:border-[#2E2E36] bg-white dark:bg-[#1C1C22] text-[11.5px] font-medium text-[#3A3A3A] dark:text-[#E4E4E7] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F] cursor-pointer transition-colors"
                     >
                       Enable all
                     </button>
                     <button
                       type="button"
                       onClick={() => onEnableAllWorldCalendars(false)}
-                      className="px-2 py-1 rounded border border-[#E2E2E2] text-[11px] font-medium text-[#4A4A4A] hover:bg-[#F5F5F5] cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-md border border-[#E2E2E2] dark:border-[#2E2E36] bg-white dark:bg-[#1C1C22] text-[11.5px] font-medium text-[#3A3A3A] dark:text-[#E4E4E7] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F] cursor-pointer transition-colors"
                     >
                       Clear all
                     </button>
@@ -649,25 +711,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* World Calendar Festival & Tithi Overlays */}
-                <div className="border border-[#ECECEC] rounded-lg divide-y divide-[#F2F2F2] bg-[#FAFAFA] px-3">
+                <div className="border border-[#ECECEC] dark:border-[#27272E] rounded-lg divide-y divide-[#F2F2F2] dark:divide-[#24242B] bg-[#FAFAFA] dark:bg-[#1A1A20] px-3.5">
                   {worldOverlayLayers.map((layer) => {
                     const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.teal;
                     return (
                       <div
                         key={layer.id}
-                        className="py-2.5 flex items-center justify-between gap-3"
+                        className="py-2.5 flex items-center justify-between gap-3 min-w-0"
                       >
-                        <div className="flex items-start gap-2.5 min-w-0">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
                           <span
                             className="w-3 h-3 rounded-[3px] mt-1 shrink-0"
                             style={{ backgroundColor: theme.dot }}
                           />
                           <div className="min-w-0">
-                            <div className="text-[12.5px] font-medium text-[#1A1A1A]">
+                            <div className="text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]">
                               {layer.name}
                             </div>
                             {layer.description && (
-                              <div className="text-[11px] text-[#737373] leading-snug">
+                              <div className="text-[11px] text-[#737373] dark:text-[#A1A1AA] leading-snug">
                                 {layer.description}
                               </div>
                             )}
@@ -681,39 +743,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     );
                   })}
-
-                  <div className="py-2.5 flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[12.5px] font-medium text-[#1A1A1A]">
-                        Gujarati Script (<span className="font-gujarati">ગુજરાતી</span>)
-                      </div>
-                      <div className="text-[11px] text-[#737373]">
-                        Show Gujarati Vikram Samvat Tithis in native Gujarati script.
-                      </div>
-                    </div>
-                    <ToggleSwitch
-                      checked={gujaratiScript}
-                      onChange={onToggleGujaratiScript}
-                      label="Toggle Gujarati script labels"
-                    />
-                  </div>
                 </div>
 
-                {/* Primary & Sub-header Calendar Selectors (BOTH WIRED!) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-[#FAFAFA] border border-[#ECECEC] rounded-lg p-3">
-                  <div>
-                    <div className="text-[12.5px] font-medium text-[#1A1A1A]">
-                      Primary calendar system
-                    </div>
-                    <div className="text-[11px] text-[#7A7A7A] mb-1.5">
-                      Reference calendar used for date conversions.
+                {/* Primary & Sub-header Calendar Selectors (Aligned baseline & full width) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-[#FAFAFA] dark:bg-[#1A1A20] border border-[#ECECEC] dark:border-[#27272E] rounded-lg p-3.5">
+                  <div className="flex flex-col justify-between gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <label
+                        htmlFor="primary-calendar-select"
+                        className="block text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]"
+                      >
+                        Primary calendar system
+                      </label>
+                      <p className="text-[11px] text-[#7A7A7A] dark:text-[#A1A1AA] mt-0.5 leading-snug">
+                        Reference calendar used for header &amp; date conversions.
+                      </p>
                     </div>
                     <select
+                      id="primary-calendar-select"
                       value={primaryCalendar}
                       onChange={(e) =>
                         onSetPrimaryCalendar(e.target.value as WorldCalendarSystemId)
                       }
-                      className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                      className="w-full min-w-0 bg-white dark:bg-[#131317] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-2.5 py-2 text-[12px] text-[#1A1A1A] dark:text-[#F4F4F5] focus:outline-none focus:border-[#3B9AE1]"
                     >
                       <option value="gregorian">Gregorian (Standard International)</option>
                       {WORLD_CALENDAR_SYSTEMS.filter((s) => s.id !== 'gregorian').map((sys) => (
@@ -724,21 +776,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </select>
                   </div>
 
-                  <div>
-                    <div className="text-[12.5px] font-medium text-[#1A1A1A]">
-                      Day column sub-header calendar
-                    </div>
-                    <div className="text-[11px] text-[#7A7A7A] mb-1.5">
-                      Optional secondary date shown on calendar headers.
+                  <div className="flex flex-col justify-between gap-2 min-w-0">
+                    <div className="min-w-0">
+                      <label
+                        htmlFor="subheader-calendar-select"
+                        className="block text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]"
+                      >
+                        Day column sub-header calendar
+                      </label>
+                      <p className="text-[11px] text-[#7A7A7A] dark:text-[#A1A1AA] mt-0.5 leading-snug">
+                        Optional secondary date shown on calendar headers.
+                      </p>
                     </div>
                     <select
+                      id="subheader-calendar-select"
                       value={headerSubCalendar}
                       onChange={(e) =>
                         onSetHeaderSubCalendar(
                           e.target.value as WorldCalendarSystemId | 'none'
                         )
                       }
-                      className="w-full bg-white border border-[#DCDCDC] rounded-md px-2.5 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                      className="w-full min-w-0 bg-white dark:bg-[#131317] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-2.5 py-2 text-[12px] text-[#1A1A1A] dark:text-[#F4F4F5] focus:outline-none focus:border-[#3B9AE1]"
                     >
                       <option value="none">None (Clean Gregorian only)</option>
                       {WORLD_CALENDAR_SYSTEMS.map((sys) => (
@@ -756,7 +814,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   value={worldFilter}
                   onChange={(e) => setWorldFilter(e.target.value)}
                   placeholder={`Filter all ${WORLD_CALENDAR_SYSTEMS.length} world calendars (e.g. Gujarati, Islamic, Hebrew, Chinese, ISO Week...)`}
-                  className="w-full bg-white border border-[#E2E2E2] rounded-md px-3 py-1.5 text-[12.5px] text-[#1A1A1A] placeholder:text-[#A3A3A3] focus:outline-none focus:border-[#3B9AE1]"
+                  className="w-full min-w-0 bg-white dark:bg-[#1A1A20] border border-[#E2E2E2] dark:border-[#2E2E36] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#3B9AE1]"
                 />
 
                 {/* Grouped World Calendar Toggles */}
@@ -765,10 +823,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   if (items.length === 0) return null;
                   return (
                     <div key={grp.id} className="space-y-1.5">
-                      <h4 className="text-[11.5px] font-semibold text-[#737373] pt-1">
+                      <h4 className="text-[11.5px] font-semibold text-[#737373] dark:text-[#A1A1AA] pt-1">
                         {grp.label} ({items.length})
                       </h4>
-                      <div className="divide-y divide-[#F2F2F2] border border-[#EFEFEF] rounded-lg px-3">
+                      <div className="divide-y divide-[#F2F2F2] dark:divide-[#24242B] border border-[#EFEFEF] dark:border-[#27272E] rounded-lg px-3">
                         {items.map(({ meta, val }) => (
                           <div
                             key={meta.id}
@@ -776,7 +834,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           >
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[12.5px] font-medium text-[#1A1A1A] truncate">
+                                <span className="text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
                                   {meta.name}
                                 </span>
                                 <a
@@ -784,13 +842,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title={`Reference: ${meta.name}`}
-                                  className="text-[#A3A3A3] hover:text-[#1A1A1A] shrink-0"
+                                  className="text-[#A3A3A3] dark:text-[#71717A] hover:text-[#1A1A1A] dark:hover:text-white shrink-0"
                                 >
                                   <ExternalLink className="w-3 h-3" />
                                 </a>
                               </div>
                               <div
-                                className={`text-[11.5px] text-[#525252] mt-0.5 tabular-nums truncate ${
+                                className={`text-[11.5px] text-[#525252] dark:text-[#A1A1AA] mt-0.5 tabular-nums truncate ${
                                   meta.id === 'gujarati-vikram' && gujaratiScript
                                     ? 'font-gujarati'
                                     : ''
@@ -812,8 +870,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   );
                 })}
 
-                <div className="pt-3 border-t border-[#EFEFEF]">
-                  <div className="text-[11.5px] font-semibold text-[#737373] mb-2">
+                <div className="pt-3 border-t border-[#EFEFEF] dark:border-[#24242B]">
+                  <div className="text-[11.5px] font-semibold text-[#737373] dark:text-[#A1A1AA] mb-2">
                     Reference Links
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11.5px]">
@@ -823,7 +881,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[#185D8F] hover:underline"
+                        className="inline-flex items-center gap-1 text-[#185D8F] dark:text-[#60A5FA] hover:underline"
                       >
                         <span>{link.label}</span>
                         <ExternalLink className="w-3 h-3" />
@@ -837,19 +895,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 3: DISPLAY, TIMEZONES & WEATHER ==================== */}
             {tab === 'display' && (
               <div className="space-y-6">
-                <div className="space-y-4">
-                  <div className="pb-3 border-b border-[#EFEFEF]">
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                {/* Global Appearance / Dark Mode Toggle */}
+                <div className="space-y-3">
+                  <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
+                      Appearance
+                    </h3>
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
+                      Choose between light and dark workspace themes. Saved automatically on this device.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-[#FAFAFA] dark:bg-[#1A1A20] border border-[#ECECEC] dark:border-[#27272E] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#111114] border border-[#E6E6E6] dark:border-[#2E2E36] flex items-center justify-center shrink-0">
+                        {darkMode ? (
+                          <Moon className="w-4 h-4 text-[#F4F4F5]" />
+                        ) : (
+                          <Sun className="w-4 h-4 text-[#D97706]" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
+                          Global Dark Mode
+                        </div>
+                        <div className="text-[11.5px] text-[#737373] dark:text-[#A1A1AA]">
+                          {darkMode
+                            ? 'Obsidian dark canvas active across the workspace.'
+                            : 'Bright studio canvas active across the workspace.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="text-[12px] font-medium text-[#525252] dark:text-[#A1A1AA]">
+                        {darkMode ? 'Dark' : 'Light'}
+                      </span>
+                      <ToggleSwitch
+                        checked={darkMode}
+                        onChange={onToggleDarkMode}
+                        label="Toggle global dark mode"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t border-[#EFEFEF] dark:border-[#24242B]">
+                  <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Dual Timezone Columns
                     </h3>
-                    <p className="text-[12px] text-[#737373] mt-0.5">
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                       Primary timezone defaults automatically to your current device location.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div className="flex flex-col justify-between gap-1.5 min-w-0">
+                      <label className="block text-[12px] font-medium text-[#4A4A4A] dark:text-[#D4D4D8]">
                         Primary timezone (local)
                       </label>
                       <select
@@ -860,7 +963,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           );
                           if (found) onSetPrimaryTz(found);
                         }}
-                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                        className="w-full min-w-0 bg-white dark:bg-[#1A1A20] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] focus:outline-none focus:border-[#3B9AE1]"
                       >
                         {allTimezoneOptions.map((tz) => (
                           <option key={tz.id} value={tz.id}>
@@ -870,8 +973,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </select>
                     </div>
 
-                    <div>
-                      <label className="block text-[12px] font-medium text-[#4A4A4A] mb-1">
+                    <div className="flex flex-col justify-between gap-1.5 min-w-0">
+                      <label className="block text-[12px] font-medium text-[#4A4A4A] dark:text-[#D4D4D8]">
                         Secondary timezone (comparison)
                       </label>
                       <select
@@ -882,7 +985,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           );
                           if (found) onSetSecondaryTz(found);
                         }}
-                        className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                        className="w-full min-w-0 bg-white dark:bg-[#1A1A20] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] focus:outline-none focus:border-[#3B9AE1]"
                       >
                         {allTimezoneOptions.map((tz) => (
                           <option key={tz.id} value={tz.id}>
@@ -895,14 +998,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Weather Location & Units */}
-                <div className="space-y-3 pt-4 border-t border-[#EFEFEF]">
+                <div className="space-y-3 pt-4 border-t border-[#EFEFEF] dark:border-[#24242B]">
                   <div className="flex items-center gap-2">
-                    <CloudSun className="w-4 h-4 text-[#D98E04]" />
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                    <CloudSun className="w-4 h-4 text-[#D98E04] shrink-0" />
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Weather Forecast Location
                     </h3>
                   </div>
-                  <p className="text-[12px] text-[#737373]">
+                  <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA]">
                     Set your city or use browser geolocation for the Weather &amp; Time panel.
                   </p>
 
@@ -911,7 +1014,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       e.preventDefault();
                       if (cityDraft.trim()) {
                         onSetWeatherLocationQuery(cityDraft.trim());
-                        showToast?.(`Weather location updated to ${cityDraft.trim()}`);
                       }
                     }}
                     className="flex flex-col sm:flex-row gap-2"
@@ -921,12 +1023,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       value={cityDraft}
                       onChange={(e) => setCityDraft(e.target.value)}
                       placeholder="City or region (e.g. London, New York, Mumbai)"
-                      className="flex-1 bg-white border border-[#DCDCDC] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                      className="flex-1 min-w-0 bg-white dark:bg-[#1A1A20] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-3 py-2 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#3B9AE1]"
                     />
                     <button
                       type="submit"
                       disabled={!cityDraft.trim()}
-                      className="px-4 py-2 rounded-md bg-[#1A1A1A] hover:bg-[#333333] disabled:opacity-40 text-white text-[12.5px] font-medium cursor-pointer shrink-0"
+                      className="px-4 py-2 rounded-md bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white disabled:opacity-40 text-white dark:text-[#09090B] text-[12.5px] font-medium cursor-pointer shrink-0 transition-colors"
                     >
                       Update location
                     </button>
@@ -936,22 +1038,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={onUseWeatherGeolocation}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DCDCDC] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#1A1A1A] cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-[#DCDCDC] dark:border-[#2E2E36] bg-white dark:bg-[#1C1C22] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] cursor-pointer transition-colors"
                     >
-                      <LocateFixed className="w-3.5 h-3.5 text-[#185D8F]" />
+                      <LocateFixed className="w-3.5 h-3.5 text-[#185D8F] dark:text-[#60A5FA]" />
                       <span>Use my current GPS location</span>
                     </button>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[12px] text-[#666666]">Temperature unit:</span>
-                      <div className="inline-flex rounded-md border border-[#DCDCDC] overflow-hidden text-[12px] font-medium">
+                      <span className="text-[12px] text-[#666666] dark:text-[#A1A1AA]">Temperature unit:</span>
+                      <div className="inline-flex rounded-md border border-[#DCDCDC] dark:border-[#2E2E36] overflow-hidden text-[12px] font-medium">
                         <button
                           type="button"
                           onClick={() => onSetWeatherUnits('METRIC')}
-                          className={`px-3 py-1 cursor-pointer ${
+                          className={`px-3 py-1 cursor-pointer transition-colors ${
                             weatherUnits === 'METRIC'
-                              ? 'bg-[#1A1A1A] text-white'
-                              : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                              ? 'bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B]'
+                              : 'bg-white dark:bg-[#1C1C22] text-[#525252] dark:text-[#A1A1AA] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F]'
                           }`}
                         >
                           °C
@@ -959,10 +1061,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => onSetWeatherUnits('IMPERIAL')}
-                          className={`px-3 py-1 cursor-pointer ${
+                          className={`px-3 py-1 cursor-pointer transition-colors ${
                             weatherUnits === 'IMPERIAL'
-                              ? 'bg-[#1A1A1A] text-white'
-                              : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                              ? 'bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B]'
+                              : 'bg-white dark:bg-[#1C1C22] text-[#525252] dark:text-[#A1A1AA] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F]'
                           }`}
                         >
                           °F
@@ -977,66 +1079,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 4: CALENDAR DATA SYNC (.ICS) ==================== */}
             {tab === 'sync' && (
               <div className="space-y-6">
-                <div className="pb-3 border-b border-[#EFEFEF]">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                     Calendar Data Synchronization (.ics)
                   </h3>
-                  <p className="text-[12px] text-[#737373] mt-0.5">
+                  <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                     Export your schedule to an industry-standard iCalendar (.ics) file or import events from Apple Calendar, Outlook, or Google Calendar.
                   </p>
                 </div>
 
                 {/* Export Section */}
-                <div className="p-4 rounded-xl border border-[#EAEAEA] bg-[#FAFAFA] space-y-3.5">
-                  <div className="flex items-center gap-2">
-                    <Download className="w-4 h-4 text-[#1A1A1A]" />
-                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">
-                      Export to .ics File
-                    </h4>
+                <div className="p-4 rounded-xl border border-[#EAEAEA] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] space-y-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Download className="w-4 h-4 text-[#1A1A1A] dark:text-[#F4F4F5] shrink-0" />
+                      <h4 className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
+                        Export to .ics File
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedExportLayers(new Set(exportableLayers.map((l) => l.id)))
+                        }
+                        className="text-[#4A4A4A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white underline cursor-pointer"
+                      >
+                        Select all
+                      </button>
+                      <span className="text-[#CCCCCC] dark:text-[#52525B]">·</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExportLayers(new Set())}
+                        className="text-[#4A4A4A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white underline cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    {layers
-                      .filter((l) => l.type === 'personal' || l.type === 'custom' || l.type === 'google')
-                      .map((layer) => {
-                        const checked = selectedExportLayers.has(layer.id);
-                        const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.blue;
-                        return (
-                          <button
-                            key={layer.id}
-                            type="button"
-                            onClick={() => {
-                              setSelectedExportLayers((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(layer.id)) next.delete(layer.id);
-                                else next.add(layer.id);
-                                return next;
-                              });
-                            }}
-                            className={`px-2.5 py-1 rounded-md border text-[11.5px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
-                              checked
-                                ? 'bg-white border-[#1A1A1A] text-[#1A1A1A]'
-                                : 'bg-transparent border-[#DCDCDC] text-[#737373]'
-                            }`}
-                          >
-                            <span
-                              className="w-2.5 h-2.5 rounded-xs shrink-0"
-                              style={{ backgroundColor: layer.customHex || theme.dot }}
-                            />
-                            <span>{layer.name}</span>
-                          </button>
-                        );
-                      })}
+                    {exportableLayers.map((layer) => {
+                      const checked = selectedExportLayers.has(layer.id);
+                      const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.blue;
+                      return (
+                        <button
+                          key={layer.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedExportLayers((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(layer.id)) next.delete(layer.id);
+                              else next.add(layer.id);
+                              return next;
+                            });
+                          }}
+                          className={`px-2.5 py-1 rounded-md border text-[11.5px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                            checked
+                              ? 'bg-white dark:bg-[#24242C] border-[#1A1A1A] dark:border-[#F4F4F5] text-[#1A1A1A] dark:text-[#F4F4F5]'
+                              : 'bg-transparent border-[#DCDCDC] dark:border-[#2E2E36] text-[#737373] dark:text-[#A1A1AA]'
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-xs shrink-0"
+                            style={{ backgroundColor: layer.customHex || theme.dot }}
+                          />
+                          <span>{layer.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                    <span className="text-[11.5px] text-[#666666] tabular-nums">
-                      {eventsToExport.length} event{eventsToExport.length === 1 ? '' : 's'} ready to export
+                    <span className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] tabular-nums">
+                      {selectedExportLayers.size === 0
+                        ? 'Select at least one calendar to export'
+                        : `${eventsToExport.length} event${eventsToExport.length === 1 ? '' : 's'} ready to export`}
                     </span>
                     <button
                       type="button"
+                      disabled={selectedExportLayers.size === 0}
                       onClick={handleDownloadIcs}
-                      className="px-4 py-2 rounded-lg bg-[#1A1A1A] hover:bg-[#333333] text-white text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer"
+                      className="px-4 py-2 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed text-white dark:text-[#09090B] text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
                     >
                       {exportSuccess ? (
                         <>
@@ -1054,14 +1178,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Import Section */}
-                <div className="p-4 rounded-xl border border-[#EAEAEA] bg-white space-y-3">
+                <div className="p-4 rounded-xl border border-[#EAEAEA] dark:border-[#27272E] bg-white dark:bg-[#1A1A20] space-y-3">
                   <div className="flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-[#1A1A1A]" />
-                    <h4 className="text-[13px] font-semibold text-[#1A1A1A]">
+                    <Upload className="w-4 h-4 text-[#1A1A1A] dark:text-[#F4F4F5]" />
+                    <h4 className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Import .ics Calendar File
                     </h4>
                   </div>
-                  <p className="text-[12px] text-[#737373]">
+                  <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA]">
                     Imported events are saved locally on this device inside your Personal Events calendar.
                   </p>
 
@@ -1076,13 +1200,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-6 border border-dashed border-[#D0D0D0] hover:border-[#1A1A1A] hover:bg-[#FAFAFA] rounded-lg flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full py-6 border border-dashed border-[#D0D0D0] dark:border-[#3A3A44] hover:border-[#1A1A1A] dark:hover:border-[#F4F4F5] hover:bg-[#FAFAFA] dark:hover:bg-[#22222A] rounded-lg flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <FileText className="w-5 h-5 text-[#737373]" />
-                    <span className="text-[12.5px] font-medium text-[#1A1A1A]">
+                    <FileText className="w-5 h-5 text-[#737373] dark:text-[#A1A1AA]" />
+                    <span className="text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Click to choose a .ics file from your device
                     </span>
-                    <span className="text-[11px] text-[#8C8C8C]">
+                    <span className="text-[11px] text-[#8C8C8C] dark:text-[#71717A]">
                       Supports Apple Calendar, Google Calendar &amp; Outlook exports
                     </span>
                   </button>
@@ -1091,8 +1215,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div
                       className={`p-2.5 rounded-lg text-[12px] flex items-center gap-2 ${
                         importStatus.type === 'success'
-                          ? 'bg-[#E6F4EA] text-[#1E7E34] border border-[#B7DFC2]'
-                          : 'bg-[#FDE2E4] text-[#8A1520] border border-[#F5B7BC]'
+                          ? 'bg-[#E6F4EA] dark:bg-emerald-950/60 text-[#1E7E34] dark:text-emerald-300 border border-[#B7DFC2] dark:border-emerald-800/60'
+                          : 'bg-[#FDE2E4] dark:bg-red-950/60 text-[#8A1520] dark:text-red-300 border border-[#F5B7BC] dark:border-red-800/60'
                       }`}
                     >
                       {importStatus.type === 'success' ? (
@@ -1110,24 +1234,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 5: KEYBOARD SHORTCUTS ==================== */}
             {tab === 'shortcuts' && (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF]">
+                <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
                   <div>
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Keyboard Shortcuts
                     </h3>
-                    <p className="text-[12px] text-[#737373] mt-0.5">
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                       Navigate dates, switch views, and create events without leaving your keyboard.
                     </p>
                   </div>
 
-                  <div className="inline-flex rounded-md border border-[#DCDCDC] overflow-hidden text-[11.5px] font-medium">
+                  <div className="inline-flex rounded-md border border-[#DCDCDC] dark:border-[#2E2E36] overflow-hidden text-[11.5px] font-medium">
                     <button
                       type="button"
                       onClick={() => setShortcutOs('mac')}
-                      className={`px-2.5 py-1 cursor-pointer ${
+                      className={`px-2.5 py-1 cursor-pointer transition-colors ${
                         shortcutOs === 'mac'
-                          ? 'bg-[#1A1A1A] text-white'
-                          : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                          ? 'bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B]'
+                          : 'bg-white dark:bg-[#1C1C22] text-[#525252] dark:text-[#A1A1AA] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F]'
                       }`}
                     >
                       macOS
@@ -1135,10 +1259,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShortcutOs('win')}
-                      className={`px-2.5 py-1 cursor-pointer ${
+                      className={`px-2.5 py-1 cursor-pointer transition-colors ${
                         shortcutOs === 'win'
-                          ? 'bg-[#1A1A1A] text-white'
-                          : 'bg-white text-[#525252] hover:bg-[#F5F5F5]'
+                          ? 'bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B]'
+                          : 'bg-white dark:bg-[#1C1C22] text-[#525252] dark:text-[#A1A1AA] hover:bg-[#F5F5F5] dark:hover:bg-[#26262F]'
                       }`}
                     >
                       Windows
@@ -1147,13 +1271,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-[#9A9A9A] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-3.5 h-3.5 text-[#9A9A9A] dark:text-[#71717A] absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={shortcutFilter}
                     onChange={(e) => setShortcutFilter(e.target.value)}
                     placeholder="Filter shortcuts..."
-                    className="w-full bg-white border border-[#E2E2E2] rounded-md pl-8 pr-3 py-1.5 text-[12.5px] text-[#1A1A1A] focus:outline-none focus:border-[#3B9AE1]"
+                    className="w-full bg-white dark:bg-[#1A1A20] border border-[#E2E2E2] dark:border-[#2E2E36] rounded-md pl-8 pr-3 py-1.5 text-[12.5px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#3B9AE1]"
                   />
                 </div>
 
@@ -1168,26 +1292,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     if (filtered.length === 0) return null;
                     return (
                       <div key={cat.name} className="space-y-1.5">
-                        <h4 className="text-[11.5px] font-semibold text-[#737373]">
+                        <h4 className="text-[11.5px] font-semibold text-[#737373] dark:text-[#A1A1AA]">
                           {cat.name}
                         </h4>
-                        <div className="border border-[#EFEFEF] rounded-lg divide-y divide-[#F4F4F4]">
+                        <div className="border border-[#EFEFEF] dark:border-[#27272E] rounded-lg divide-y divide-[#F4F4F4] dark:divide-[#24242B]">
                           {filtered.map((item, idx) => (
                             <div
                               key={idx}
                               className="px-3 py-2 flex items-center justify-between gap-3 text-[12.5px]"
                             >
-                              <span className="text-[#262626]">{item.desc}</span>
+                              <span className="text-[#262626] dark:text-[#E4E4E7]">{item.desc}</span>
                               <div className="flex items-center gap-1 shrink-0">
                                 {item.keys.map((k, ki) =>
                                   k === 'or' ? (
-                                    <span key={ki} className="text-[11px] text-[#9A9A9A] px-0.5">
+                                    <span key={ki} className="text-[11px] text-[#9A9A9A] dark:text-[#71717A] px-0.5">
                                       or
                                     </span>
                                   ) : (
                                     <kbd
                                       key={ki}
-                                      className="px-1.5 py-0.5 text-[11px] font-mono font-medium bg-[#F5F5F5] border border-[#DFDFDF] rounded text-[#1A1A1A]"
+                                      className="px-1.5 py-0.5 text-[11px] font-mono font-medium bg-[#F5F5F5] dark:bg-[#1E1E26] border border-[#DFDFDF] dark:border-[#32323B] rounded text-[#1A1A1A] dark:text-[#F4F4F5]"
                                     >
                                       {formatShortcutKey(k)}
                                     </kbd>
@@ -1207,24 +1331,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 6: GOOGLE CALENDAR ==================== */}
             {tab === 'google' && (
               <div className="space-y-4">
-                <div className="pb-3 border-b border-[#EFEFEF]">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                     Google Calendar Sync
                   </h3>
-                  <p className="text-[12px] text-[#737373] mt-0.5 leading-relaxed">
+                  <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5 leading-relaxed">
                     Connect Google Calendar to view or edit events with explicit confirmation before any change. Synced calendars stay unchecked until you enable them.
                   </p>
                 </div>
 
                 {googleError && (
-                  <div className="rounded-md bg-[#FDE2E4] border border-[#F5B7BC] px-3 py-2 text-[12px] text-[#8A1520]">
+                  <div className="rounded-md bg-[#FDE2E4] dark:bg-red-950/60 border border-[#F5B7BC] dark:border-red-800/60 px-3 py-2 text-[12px] text-[#8A1520] dark:text-red-300">
                     {googleError}
                   </div>
                 )}
 
                 {!googleUser ? (
-                  <div className="rounded-lg border border-[#EAEAEA] bg-[#FAFAFA] p-4 space-y-3">
-                    <div className="text-[12.5px] text-[#454545] leading-relaxed">
+                  <div className="rounded-lg border border-[#EAEAEA] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] p-4 space-y-3">
+                    <div className="text-[12.5px] text-[#454545] dark:text-[#D4D4D8] leading-relaxed">
                       Sign in with Google to link your calendars while keeping your local holiday view clean.
                     </div>
                     <div className="max-w-[260px]">
@@ -1236,25 +1360,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="rounded-lg border border-[#E6E6E6] bg-[#FAFAFA] p-3.5 flex items-center justify-between gap-3">
+                    <div className="rounded-lg border border-[#E6E6E6] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] p-3.5 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         {googleUser.photoURL ? (
                           <img
                             src={googleUser.photoURL}
                             alt={googleUser.displayName || 'Google account'}
                             referrerPolicy="no-referrer"
-                            className="w-9 h-9 rounded-full border border-[#E2E2E2] shrink-0"
+                            className="w-9 h-9 rounded-full border border-[#E2E2E2] dark:border-[#32323B] shrink-0"
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-[#1A1A1A] text-white text-[13px] font-semibold flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B] text-[13px] font-semibold flex items-center justify-center shrink-0">
                             {(googleUser.email || 'G')[0].toUpperCase()}
                           </div>
                         )}
                         <div className="min-w-0">
-                          <div className="text-[13px] font-semibold text-[#1A1A1A] truncate">
+                          <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
                             {googleUser.displayName || 'Google Account'}
                           </div>
-                          <div className="text-[11.5px] text-[#666666] truncate">
+                          <div className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] truncate">
                             {googleUser.email}
                           </div>
                         </div>
@@ -1265,7 +1389,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           onClick={onGoogleSync}
                           disabled={googleSyncing}
-                          className="px-2.5 py-1.5 rounded-md border border-[#DCDCDC] bg-white hover:bg-[#F3F3F3] text-[12px] font-medium text-[#1A1A1A] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          className="px-2.5 py-1.5 rounded-md border border-[#DCDCDC] dark:border-[#2E2E36] bg-white dark:bg-[#1C1C22] hover:bg-[#F3F3F3] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                         >
                           <RefreshCw className={`w-3.5 h-3.5 ${googleSyncing ? 'animate-spin' : ''}`} />
                           <span>{googleSyncing ? 'Syncing' : 'Sync now'}</span>
@@ -1273,7 +1397,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <button
                           type="button"
                           onClick={onGoogleLogout}
-                          className="px-2.5 py-1.5 rounded-md border border-[#DCDCDC] bg-white hover:bg-[#FDE2E4] hover:border-[#F5B7BC] hover:text-[#8A1520] text-[12px] font-medium text-[#525252] inline-flex items-center gap-1.5 cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-md border border-[#DCDCDC] dark:border-[#2E2E36] bg-white dark:bg-[#1C1C22] hover:bg-[#FDE2E4] dark:hover:bg-red-950/60 hover:border-[#F5B7BC] dark:hover:border-red-800/60 hover:text-[#8A1520] dark:hover:text-red-300 text-[12px] font-medium text-[#525252] dark:text-[#A1A1AA] inline-flex items-center gap-1.5 cursor-pointer"
                         >
                           <LogOut className="w-3.5 h-3.5" />
                           <span>Disconnect</span>
@@ -1282,15 +1406,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div className="space-y-1.5">
-                      <div className="text-[12px] font-semibold text-[#1A1A1A]">
+                      <div className="text-[12px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                         Synced Google Calendars ({googleLayers.length})
                       </div>
                       {googleLayers.length === 0 ? (
-                        <p className="text-[12px] text-[#7A7A7A]">
+                        <p className="text-[12px] text-[#7A7A7A] dark:text-[#A1A1AA]">
                           No Google calendars loaded yet. Click Sync now to refresh.
                         </p>
                       ) : (
-                        <div className="divide-y divide-[#F2F2F2] border border-[#EFEFEF] rounded-lg px-3">
+                        <div className="divide-y divide-[#F2F2F2] dark:divide-[#24242B] border border-[#EFEFEF] dark:border-[#27272E] rounded-lg px-3">
                           {googleLayers.map((cal) => {
                             const theme = COLOR_THEMES[cal.color] || COLOR_THEMES.blue;
                             return (
@@ -1303,7 +1427,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     className="w-3 h-3 rounded-[3px] shrink-0"
                                     style={{ backgroundColor: cal.customHex || theme.dot }}
                                   />
-                                  <span className="text-[12.5px] font-medium text-[#1A1A1A] truncate">
+                                  <span className="text-[12.5px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
                                     {cal.name}
                                   </span>
                                 </div>
@@ -1326,16 +1450,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 7: LANGUAGE ==================== */}
             {tab === 'language' && (
               <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF]">
+                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
                   <div>
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Language &amp; Localization
                     </h3>
-                    <p className="text-[12px] text-[#737373] mt-0.5">
+                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                       Choose your preferred interface language.
                     </p>
                   </div>
-                  <span className="text-[11.5px] font-medium text-[#185D8F] shrink-0">
+                  <span className="text-[11.5px] font-medium text-[#185D8F] dark:text-[#60A5FA] shrink-0">
                     {SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage)?.nativeName || 'English'}
                   </span>
                 </div>
@@ -1345,7 +1469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   placeholder="Search supported languages..."
                   value={langFilter}
                   onChange={(e) => setLangFilter(e.target.value)}
-                  className="w-full bg-white border border-[#DCDCDC] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] focus:outline-none focus:border-[#185D8F]"
+                  className="w-full bg-white dark:bg-[#1A1A20] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#185D8F]"
                 />
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[340px] overflow-y-auto cal-scroll pr-1">
@@ -1364,22 +1488,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => onSelectLanguage?.(lang.code)}
                         className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                           isSelected
-                            ? 'bg-[#F0F9FF] border-[#0284C7]'
-                            : 'bg-white border-[#E5E7EB] hover:bg-[#F9FAFB]'
+                            ? 'bg-[#F0F9FF] dark:bg-sky-950/40 border-[#0284C7] dark:border-sky-500/70'
+                            : 'bg-white dark:bg-[#1A1A20] border-[#E5E7EB] dark:border-[#27272E] hover:bg-[#F9FAFB] dark:hover:bg-[#22222A]'
                         }`}
                       >
                         <div className="min-w-0">
-                          <div className="text-[12.5px] font-semibold text-[#111827] truncate">
+                          <div className="text-[12.5px] font-semibold text-[#111827] dark:text-[#F4F4F5] truncate">
                             {lang.nativeName}{' '}
-                            <span className="text-[11px] font-normal text-[#6B7280]">
+                            <span className="text-[11px] font-normal text-[#6B7280] dark:text-[#A1A1AA]">
                               ({lang.name})
                             </span>
                           </div>
-                          <div className="text-[10.5px] text-[#6B7280] truncate">
+                          <div className="text-[10.5px] text-[#6B7280] dark:text-[#71717A] truncate">
                             {lang.region}
                           </div>
                         </div>
-                        {isSelected && <Check className="w-4 h-4 text-[#0284C7] shrink-0" />}
+                        {isSelected && <Check className="w-4 h-4 text-[#0284C7] dark:text-sky-400 shrink-0" />}
                       </button>
                     );
                   })}
@@ -1390,31 +1514,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* ==================== TAB 8: APPS & WIDGETS ==================== */}
             {tab === 'apps' && (
               <div className="space-y-4">
-                <div className="pb-3 border-b border-[#EFEFEF]">
-                  <h3 className="text-[14px] font-semibold text-[#1A1A1A]">
+                <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
+                  <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                     Desktop &amp; Mobile Apps + Widgets
                   </h3>
-                  <p className="text-[12px] text-[#737373] mt-0.5">
+                  <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
                     Install calendar.q directly on your Mac, Windows PC, Linux desktop, iPhone, or Android phone, and launch standalone desktop or mobile widgets.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="p-4 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] space-y-2">
-                    <Monitor className="w-5 h-5 text-[#1A1A1A]" />
-                    <div className="text-[13px] font-semibold text-[#1A1A1A]">
+                  <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] space-y-2">
+                    <Monitor className="w-5 h-5 text-[#1A1A1A] dark:text-[#F4F4F5]" />
+                    <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Desktop App &amp; Widget
                     </div>
-                    <p className="text-[11.5px] text-[#666666] leading-relaxed">
+                    <p className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] leading-relaxed">
                       Native PWA window, OS app launchers (macOS, Windows, Linux), and a standalone live desktop widget.
                     </p>
                   </div>
-                  <div className="p-4 rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] space-y-2">
-                    <Smartphone className="w-5 h-5 text-[#1A1A1A]" />
-                    <div className="text-[13px] font-semibold text-[#1A1A1A]">
+                  <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] space-y-2">
+                    <Smartphone className="w-5 h-5 text-[#1A1A1A] dark:text-[#F4F4F5]" />
+                    <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
                       Mobile App &amp; Home Widget
                     </div>
-                    <p className="text-[11.5px] text-[#666666] leading-relaxed">
+                    <p className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] leading-relaxed">
                       Installable offline-ready iOS &amp; Android app with compact 2×2, 4×2, and 4×4 live mobile widgets.
                     </p>
                   </div>
@@ -1427,7 +1551,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClose();
                       onOpenDownloadHub();
                     }}
-                    className="px-4 py-2.5 rounded-lg bg-[#1A1A1A] hover:bg-[#333333] text-white text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2.5 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B] text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
                   >
                     <Download className="w-4 h-4" />
                     <span>Open Device Download &amp; Widget Hub</span>

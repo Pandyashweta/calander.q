@@ -152,11 +152,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
     [visibleDays]
   );
 
-  // Effective day sub-header calendar (respects toggling off Gujarati calendar when headerSubCalendar === 'gujarati-vikram')
-  const effectiveSubCal: WorldCalendarSystemId | 'none' =
-    headerSubCalendar === 'gujarati-vikram' && !showGujaratiCalendar
-      ? 'none'
-      : headerSubCalendar;
+  const effectiveSubCal: WorldCalendarSystemId | 'none' = headerSubCalendar;
 
   const subCalByDay = useMemo(() => {
     if (effectiveSubCal === 'none') return null;
@@ -166,17 +162,18 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
   }, [visibleDays, effectiveSubCal, gujaratiScript]);
 
   const multiCalsByDay = useMemo(() => {
-    // If enabledWorldCalendars is configured, use all active ones; otherwise fallback to effectiveSubCal if present
-    const activeList =
-      enabledWorldCalendars.length > 0
-        ? enabledWorldCalendars
-        : effectiveSubCal !== 'none'
-        ? [effectiveSubCal]
-        : [];
+    const activeList: WorldCalendarSystemId[] = [];
+    if (effectiveSubCal !== 'none') activeList.push(effectiveSubCal);
+    for (const id of enabledWorldCalendars) {
+      if (!activeList.includes(id)) activeList.push(id);
+    }
+    if (showGujaratiCalendar && !activeList.includes('gujarati-vikram')) {
+      activeList.push('gujarati-vikram');
+    }
     return visibleDays.map((d) =>
       getWorldCalendarsForDate(d, activeList, gujaratiScript)
     );
-  }, [visibleDays, enabledWorldCalendars, effectiveSubCal, gujaratiScript]);
+  }, [visibleDays, enabledWorldCalendars, effectiveSubCal, showGujaratiCalendar, gujaratiScript]);
 
   const { spanningAllDayEvents, perDayAllDayItems } = useMemo(() => {
     const firstKey = visibleDateKeys[0];
@@ -384,7 +381,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
     : undefined;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden select-none">
+    <div className="flex-1 flex flex-col min-w-0 h-full bg-white dark:bg-[#09090B] overflow-hidden select-none transition-colors">
       <div
         className={`flex-1 flex flex-col min-h-0 ${
           needsHorizontalScroll ? 'overflow-x-auto cal-scroll' : 'overflow-hidden'
@@ -392,10 +389,10 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
       >
         <div className="flex-1 flex flex-col min-h-0" style={minGridWidthStyle}>
           {/* Sticky Day Column Headers */}
-          <div className="shrink-0 border-b border-[#EFEFEF] bg-white z-20">
+          <div className="shrink-0 border-b border-[#EFEFEF] dark:border-[#242429] bg-white dark:bg-[#111114] z-20">
             <div className="flex items-stretch">
               <div
-                className={`${gutterWidthClass} shrink-0 flex items-end justify-end gap-1.5 sm:gap-2 pr-1.5 sm:pr-2.5 pb-1.5 text-[10px] font-medium text-[#8C8C8C] tracking-wide`}
+                className={`${gutterWidthClass} shrink-0 flex items-end justify-end gap-1.5 sm:gap-2 pr-1.5 sm:pr-2.5 pb-1.5 text-[10px] font-medium text-[#8C8C8C] dark:text-[#71717A] tracking-wide`}
               >
                 {!isPhone && (
                   <button
@@ -403,7 +400,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                     onClick={onOpenTimezoneModal}
                     title="Configure dual timezones"
                     aria-label="Configure dual timezones"
-                    className="p-0.5 rounded hover:bg-[#F0F0F0] text-[#8C8C8C] hover:text-[#1F1F1F] transition-colors cursor-pointer mr-auto ml-1.5"
+                    className="p-0.5 rounded hover:bg-[#F0F0F0] dark:hover:bg-[#1E1E24] text-[#8C8C8C] dark:text-[#71717A] hover:text-[#1F1F1F] dark:hover:text-white transition-colors cursor-pointer mr-auto ml-1.5"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
@@ -412,7 +409,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                   <button
                     type="button"
                     onClick={onOpenTimezoneModal}
-                    className="hover:text-[#1F1F1F] transition-colors cursor-pointer tabular-nums"
+                    className="hover:text-[#1F1F1F] dark:hover:text-white transition-colors cursor-pointer tabular-nums"
                     title={secondaryTz.label}
                   >
                     {secondaryTz.abbr}
@@ -421,7 +418,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                 <button
                   type="button"
                   onClick={onOpenTimezoneModal}
-                  className="hover:text-[#1F1F1F] transition-colors cursor-pointer tabular-nums"
+                  className="hover:text-[#1F1F1F] dark:hover:text-white transition-colors cursor-pointer tabular-nums"
                   title={primaryTz.label}
                 >
                   {primaryTz.abbr}
@@ -455,13 +452,13 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                           type="button"
                           onClick={() => onSelectDayPanchang(day, panchang)}
                           title="Inspect date across all enabled World Calendars"
-                          className="flex items-center gap-1 sm:gap-1.5 rounded px-1 sm:px-1.5 py-0.5 hover:bg-[#F5F5F5] transition-colors cursor-pointer"
+                          className="flex items-center gap-1 sm:gap-1.5 rounded px-1 sm:px-1.5 py-0.5 hover:bg-[#F5F5F5] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
                         >
                           <span
                             className={`text-[12.5px] sm:text-[13.5px] ${
                               isToday
-                                ? 'font-semibold text-[#1A1A1A]'
-                                : 'font-normal text-[#737373]'
+                                ? 'font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]'
+                                : 'font-normal text-[#737373] dark:text-[#A1A1AA]'
                             }`}
                           >
                             {DAY_NAMES_SHORT[day.getDay()]}
@@ -470,7 +467,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                             className={`text-[12.5px] sm:text-[13.5px] tabular-nums leading-none ${
                               isToday
                                 ? 'bg-[#F04422] text-white font-semibold px-[5px] sm:px-[6px] py-[2.5px] sm:py-[3px] rounded-[5px]'
-                                : 'text-[#737373] font-normal'
+                                : 'text-[#737373] dark:text-[#A1A1AA] font-normal'
                             }`}
                           >
                             {day.getDate()}
@@ -482,7 +479,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                             title={`${forecast.conditionText} · High ${formatTempRounded(
                               forecast.maxTemp
                             )} / Low ${formatTempRounded(forecast.minTemp)}`}
-                            className="hidden md:inline-flex items-center gap-0.5 text-[10.5px] text-[#7A7A7A] tabular-nums shrink-0"
+                            className="hidden md:inline-flex items-center gap-0.5 text-[10.5px] text-[#7A7A7A] dark:text-[#A1A1AA] tabular-nums shrink-0"
                           >
                             {forecastIcon && (
                               <img
@@ -566,7 +563,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                     onClick={onToggleRightPanel}
                     title="Toggle context panel (])"
                     aria-label="Toggle context panel"
-                    className="text-[12px] text-[#9A9A9A] hover:text-[#1F1F1F] hover:bg-[#F2F2F2] rounded px-1 transition-colors cursor-pointer"
+                    className="text-[12px] text-[#9A9A9A] dark:text-[#71717A] hover:text-[#1F1F1F] dark:hover:text-white hover:bg-[#F2F2F2] dark:hover:bg-[#1E1E24] rounded px-1 transition-colors cursor-pointer"
                   >
                     ±
                   </button>
@@ -575,18 +572,18 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
             </div>
 
             {/* All-Day Events & Synced Festivals/Days Banner Area */}
-            <div className="flex items-stretch border-t border-[#F2F2F2] bg-white">
+            <div className="flex items-stretch border-t border-[#F2F2F2] dark:border-[#242429] bg-white dark:bg-[#111114]">
               <div
                 className={`${gutterWidthClass} shrink-0 flex flex-col items-end justify-start pr-1.5 sm:pr-2.5 pt-2 pb-1.5`}
               >
-                <span className="text-[10px] sm:text-[10.5px] font-medium text-[#8C8C8C]">
+                <span className="text-[10px] sm:text-[10.5px] font-medium text-[#8C8C8C] dark:text-[#71717A]">
                   {isPhone ? 'All' : 'All-day'}
                 </span>
                 {maxPerDayAllDayCount > MAX_COLLAPSED_ITEMS && (
                   <button
                     type="button"
                     onClick={() => setExpandedAllDay((v) => !v)}
-                    className="mt-1 text-[10px] font-medium text-[#737373] hover:text-[#1A1A1A] cursor-pointer"
+                    className="mt-1 text-[10px] font-medium text-[#737373] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer"
                   >
                     {expandedAllDay ? 'Less' : 'More'}
                   </button>
@@ -659,7 +656,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                 return (
                   <div
                     key={col.dateKey}
-                    className="px-[2px] space-y-[3px] min-h-[26px] border-l border-[#F5F5F5] first:border-l-0"
+                    className="px-[2px] space-y-[3px] min-h-[26px] border-l border-[#F5F5F5] dark:border-[#1E1E24] first:border-l-0"
                   >
                     {visibleItems.map((item) => {
                       if (item.kind === 'event') {
@@ -734,7 +731,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                       <button
                         type="button"
                         onClick={() => setExpandedAllDay(true)}
-                        className="w-full text-left px-1.5 py-0.5 text-[10.5px] font-medium text-[#737373] hover:text-[#1A1A1A] hover:bg-[#F5F5F5] rounded cursor-pointer"
+                        className="w-full text-left px-1.5 py-0.5 text-[10.5px] font-medium text-[#737373] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white hover:bg-[#F5F5F5] dark:hover:bg-[#1E1E24] rounded cursor-pointer"
                       >
                         +{hiddenCount} more
                       </button>
@@ -748,7 +745,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
       </div>
 
       {shareMode && (
-        <div className="shrink-0 bg-[#F4F8FD] border-b border-[#D6E6F9] px-4 py-1.5 flex items-center justify-between text-[12px] text-[#185D8F]">
+        <div className="shrink-0 bg-[#F4F8FD] dark:bg-sky-950/40 border-b border-[#D6E6F9] dark:border-sky-800/50 px-4 py-1.5 flex items-center justify-between text-[12px] text-[#185D8F] dark:text-sky-300">
           <span>
             <strong>Share availability mode:</strong> Click and drag across open time slots to build your scheduling snippet.
           </span>
@@ -761,11 +758,11 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
       {/* Scrollable 24-Hour Time Grid */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden cal-scroll relative bg-white"
+        className="flex-1 overflow-y-auto overflow-x-hidden cal-scroll relative bg-white dark:bg-[#09090B]"
       >
         <div className="flex relative" style={{ height: `${24 * HOUR_HEIGHT}px` }}>
           <div
-            className={`${gutterWidthClass} shrink-0 relative border-r border-[#F0F0F0] bg-white`}
+            className={`${gutterWidthClass} shrink-0 relative border-r border-[#F0F0F0] dark:border-[#1E1E24] bg-white dark:bg-[#0D0D10]`}
           >
             {HOURS.map((hour) => {
               if (hour === 0) return null;
@@ -776,7 +773,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                 <div
                   key={hour}
                   style={{ top: `${topPx - 7}px` }}
-                  className={`absolute left-0 right-0 pr-1.5 sm:pr-2.5 flex items-center justify-end gap-2 text-[10px] text-[#9A9A9A] tabular-nums pointer-events-none transition-opacity ${
+                  className={`absolute left-0 right-0 pr-1.5 sm:pr-2.5 flex items-center justify-end gap-2 text-[10px] text-[#9A9A9A] dark:text-[#71717A] tabular-nums pointer-events-none transition-opacity ${
                     nearNow ? 'opacity-20' : 'opacity-100'
                   }`}
                 >
@@ -798,7 +795,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
 
             <div
               style={{ top: `${nowMinutes - 7}px` }}
-              className="absolute right-1.5 sm:right-2.5 z-30 bg-white px-0.5 text-[9.5px] sm:text-[10px] font-semibold text-[#1A1A1A] tabular-nums leading-none pointer-events-none"
+              className="absolute right-1.5 sm:right-2.5 z-30 bg-white dark:bg-[#0D0D10] px-0.5 text-[9.5px] sm:text-[10px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] tabular-nums leading-none pointer-events-none"
             >
               {formatMinutesToTime(nowMinutes)}
             </div>
@@ -810,7 +807,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                 <div
                   key={hour}
                   style={{ top: `${hour * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
-                  className="absolute left-0 right-0 border-t border-[#F1F1F1]"
+                  className="absolute left-0 right-0 border-t border-[#F1F1F1] dark:border-[#1B1B21]"
                 />
               ))}
             </div>
@@ -841,7 +838,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                         currentMinutes: mins + 60,
                       });
                     }}
-                    className={`relative h-full border-l border-[#F1F1F1] first:border-l-0 ${
+                    className={`relative h-full border-l border-[#F1F1F1] dark:border-[#1B1B21] first:border-l-0 ${
                       shareMode ? 'cursor-crosshair' : 'cursor-default'
                     }`}
                   >
@@ -1011,14 +1008,14 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
               })}
             </div>
 
-            {/* Signature Current-Time Black Horizontal Line */}
+            {/* Signature Current-Time Horizontal Line */}
             <div
               style={{ top: `${nowMinutes}px` }}
               className={`absolute left-0 ${
                 showRightToggleRail ? 'right-[24px]' : 'right-1.5'
               } z-20 pointer-events-none flex items-center`}
             >
-              <span className="w-[1.5px] h-[9px] bg-[#1A1A1A] shrink-0" />
+              <span className="w-[1.5px] h-[9px] bg-[#1A1A1A] dark:bg-[#F04422] shrink-0" />
               {todayColIdx >= 0 ? (
                 <div
                   className="flex-1 grid items-center"
@@ -1031,15 +1028,15 @@ export const TimeGrid: React.FC<TimeGridProps> = ({
                       <div
                         className={`w-full ${
                           idx === todayColIdx
-                            ? 'h-[2px] bg-[#1A1A1A]'
-                            : 'h-[1px] bg-[#1A1A1A]/15'
+                            ? 'h-[2px] bg-[#1A1A1A] dark:bg-[#F04422]'
+                            : 'h-[1px] bg-[#1A1A1A]/15 dark:bg-white/15'
                         }`}
                       />
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex-1 h-[1px] bg-[#1A1A1A]/20" />
+                <div className="flex-1 h-[1px] bg-[#1A1A1A]/20 dark:bg-white/20" />
               )}
             </div>
           </div>

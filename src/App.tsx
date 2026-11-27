@@ -8,7 +8,7 @@ import {
   Moon,
   PanelLeft,
   PanelRight,
-  WifiOff,
+  Settings,
 } from 'lucide-react';
 import {
   AvailabilitySlot,
@@ -62,14 +62,19 @@ import { TimeGrid } from './components/TimeGrid';
 import { MonthView } from './components/MonthView';
 import { RightPanel, RightSelection } from './components/RightPanel';
 import { ActiveModal, Modals } from './components/Modals';
-import { SettingsModal, SettingsTab } from './components/SettingsModal';
+import {
+  SUPPORTED_LANGUAGES,
+  SettingsModal,
+  SettingsTab,
+} from './components/SettingsModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { AstronomyModal } from './components/AstronomyModal';
 import { AppDownloadHub } from './components/AppDownloadHub';
 import { LandingPage } from './components/LandingPage';
 import { WidgetView } from './components/WidgetView';
+import { OfflineSyncIndicator } from './components/OfflineSyncIndicator';
 import { useViewport } from './hooks/useViewport';
-import { useOnlineStatus } from './hooks/usePWAInstall';
+import { useOnlineStatus, usePWAInstall } from './hooks/usePWAInstall';
 import { AuthModal, AuthModalTab } from './components/AuthModal';
 import { LegalDocId, LegalModal } from './components/LegalModal';
 import {
@@ -91,6 +96,7 @@ import {
 const STORAGE_EVENTS_KEY = 'calendar_q_events_v3';
 const STORAGE_LAYERS_KEY = 'calendar_q_layers_v3';
 const STORAGE_PREFS_KEY = 'calendar_q_prefs_v3';
+const STORAGE_THEME_KEY = 'calendar_q_theme_v1';
 
 type AppSurface = 'landing' | 'calendar' | 'widget-desktop' | 'widget-mobile';
 
@@ -115,6 +121,43 @@ function getInitialSurface(): AppSurface {
 export default function App() {
   const [appSurface, setAppSurface] = useState<AppSurface>(getInitialSurface);
   const isOnline = useOnlineStatus();
+
+  // Global dark mode preference persisted in localStorage
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(STORAGE_THEME_KEY) === 'dark';
+    } catch {
+      return false;
+    }
+  });
+
+  // Dynamically update Tailwind html/body classes, theme-color meta, and localStorage
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STORAGE_THEME_KEY, darkMode ? 'dark' : 'light');
+    } catch {
+      // ignore storage quota / privacy mode errors
+    }
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    html.classList.toggle('dark', darkMode);
+
+    if (darkMode) {
+      body.classList.add('dark', 'bg-[#09090B]', 'text-[#F4F4F5]');
+      body.classList.remove('bg-white', 'text-[#1A1A1A]');
+    } else {
+      body.classList.remove('dark', 'bg-[#09090B]', 'text-[#F4F4F5]');
+      body.classList.add('bg-white', 'text-[#1A1A1A]');
+    }
+
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.content = darkMode || appSurface === 'landing' ? '#09090B' : '#FFFFFF';
+    }
+  }, [darkMode, appSurface]);
 
   const [today, setToday] = useState<Date>(() => {
     const now = new Date();
@@ -389,7 +432,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('festivals');
   const [astronomyOpen, setAstronomyOpen] = useState(false);
-  const [downloadHubOpen, setDownloadHubOpen] = useState(false);
+  const [downloadHubOpen, setDownloadHubOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('install') === '1';
+  });
+  const { canInstall: pwaCanInstall, isInstalled: pwaIsInstalled } = usePWAInstall();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -454,10 +501,16 @@ export default function App() {
   const handleSelectLanguage = useCallback(
     (code: string) => {
       setSelectedLanguage(code);
+      if (typeof document !== 'undefined') {
+        document.documentElement.lang = code;
+      }
       if (code === 'gu') {
         setGujaratiScript(true);
       }
-      showToast(`Language set to ${code.toUpperCase()}`);
+      const match = SUPPORTED_LANGUAGES.find((l) => l.code === code);
+      showToast(
+        match ? `Language set to ${match.nativeName} (${match.name})` : `Language set to ${code.toUpperCase()}`
+      );
     },
     [showToast]
   );
@@ -812,7 +865,7 @@ export default function App() {
         : '';
 
     let subCaption = '';
-    if (headerSubCalendar === 'gujarati-vikram' && showGujaratiCalendar) {
+    if (headerSubCalendar === 'gujarati-vikram') {
       const pStart = getGujaratiPanchang(firstDay);
       const pEnd = getGujaratiPanchang(lastDay);
       subCaption =
@@ -823,12 +876,23 @@ export default function App() {
           : gujaratiScript
           ? `${pStart.monthGu}–${pEnd.monthGu} · વિ.સં. ${pEnd.vikramSamvat}`
           : `${pStart.monthEn}–${pEnd.monthEn} · VS ${pEnd.vikramSamvat}`;
-    } else if (headerSubCalendar !== 'none' && headerSubCalendar !== 'gujarati-vikram') {
+    } else if (headerSubCalendar !== 'none') {
       const val = convertToWorldCalendar(firstDay, headerSubCalendar, gujaratiScript);
       subCaption = `${val.name} · ${val.formatted}`;
     } else if (primaryCalendar !== 'gregorian') {
       const val = convertToWorldCalendar(firstDay, primaryCalendar, gujaratiScript);
       subCaption = `${val.name} · ${val.formatted}`;
+    } else if (showGujaratiCalendar) {
+      const pStart = getGujaratiPanchang(firstDay);
+      const pEnd = getGujaratiPanchang(lastDay);
+      subCaption =
+        pStart.monthEn === pEnd.monthEn
+          ? gujaratiScript
+            ? `${pStart.monthGu} · વિક્રમ સંવત ${pStart.vikramSamvat}`
+            : `${pStart.monthEn} · VS ${pStart.vikramSamvat}`
+          : gujaratiScript
+          ? `${pStart.monthGu}–${pEnd.monthGu} · વિ.સં. ${pEnd.vikramSamvat}`
+          : `${pStart.monthEn}–${pEnd.monthEn} · VS ${pEnd.vikramSamvat}`;
     }
 
     return {
@@ -891,15 +955,15 @@ export default function App() {
 
   const handleToggleAllCultural = useCallback(() => {
     setLayers((prev) => {
-      const anyOn = prev.some(
-        (l) => l.groupId === 'holidays-festivals' && l.visible
-      );
+      const isHolidayOrIndian = (l: CalendarLayer) =>
+        l.id === 'national-holidays' || l.id === 'indian-festivals';
+      const anyOn = prev.some((l) => isHolidayOrIndian(l) && l.visible);
       const nextVal = !anyOn;
       showToast(
         nextVal ? 'Showing Holidays & Indian Festivals' : 'Hidden Holidays & Festivals'
       );
       return prev.map((l) =>
-        l.groupId === 'holidays-festivals' ? { ...l, visible: nextVal } : l
+        isHolidayOrIndian(l) ? { ...l, visible: nextVal } : l
       );
     });
   }, [showToast]);
@@ -1257,13 +1321,16 @@ export default function App() {
         setShareMode((v) => !v);
         setSelection({ kind: 'none' });
         setRightOpen(true);
-      } else if (key === 'c') {
+      } else if (key === 'c' || key === 'n') {
         e.preventDefault();
         handleCreateEventNow();
+      } else if (key === '/') {
+        e.preventDefault();
+        setActiveModal('command');
       } else if (key === '.') {
         e.preventDefault();
         setActiveModal('goto');
-      } else if (key === '1') {
+      } else if (key === '1' || key === 'd') {
         setViewMode('day');
       } else if (key === '3') {
         setViewMode('3days');
@@ -1273,10 +1340,10 @@ export default function App() {
         setViewMode('week');
       } else if (key === 'm') {
         setViewMode('month');
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' || key === 'k') {
         e.preventDefault();
         handlePrev();
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === 'ArrowRight' || key === 'j') {
         e.preventDefault();
         handleNext();
       } else if (e.key === '[') {
@@ -1364,6 +1431,11 @@ export default function App() {
           onLaunchWidget={(mode) =>
             navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
           }
+          onOpenLegal={(doc) => {
+            setLegalInitialDoc(doc);
+            setLegalModalOpen(true);
+          }}
+          showToast={showToast}
         />
 
         <AuthModal
@@ -1387,6 +1459,12 @@ export default function App() {
           showToast={showToast}
         />
 
+        <LegalModal
+          open={legalModalOpen}
+          onClose={() => setLegalModalOpen(false)}
+          initialDoc={legalInitialDoc}
+        />
+
         {toastMsg && (
           <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
             {toastMsg}
@@ -1398,23 +1476,16 @@ export default function App() {
 
   // ========= SURFACE 3: MAIN CALENDAR WORKSPACE =========
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-white text-[#1A1A1A]">
-      {!isOnline && (
-        <div className="bg-[#1A1A1A] text-white px-4 py-1.5 text-[11.5px] flex items-center justify-center gap-2 shrink-0">
-          <WifiOff className="w-3.5 h-3.5" />
-          <span>Offline mode — your local calendar, holidays, and events remain available on this device.</span>
-        </div>
-      )}
-
+    <div className="h-screen w-screen overflow-hidden flex flex-col bg-white dark:bg-[#09090B] text-[#1A1A1A] dark:text-[#F4F4F5] transition-colors duration-200">
       {gmpQuotaExceeded && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0">
+        <div className="bg-amber-50 dark:bg-amber-950/70 border-b border-amber-200 dark:border-amber-800/70 text-amber-900 dark:text-amber-100 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm shrink-0">
           <span>
             Google Maps Platform quota reached. If you are the app owner, visit{' '}
             <a
               href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline font-semibold text-amber-950 hover:text-amber-800"
+              className="underline font-semibold text-amber-950 dark:text-amber-200 hover:text-amber-800"
             >
               maps developer site
             </a>{' '}
@@ -1477,9 +1548,9 @@ export default function App() {
           />
         )}
 
-        <main className="flex-1 flex flex-col min-w-0 h-full bg-white overflow-hidden">
+        <main className="flex-1 flex flex-col min-w-0 h-full bg-white dark:bg-[#09090B] overflow-hidden">
           {/* Clean Top Workspace Bar */}
-          <header className="h-[52px] sm:h-[54px] px-3 sm:px-5 flex items-center justify-between gap-2 sm:gap-3 shrink-0 bg-white border-b border-[#EFEFEF]">
+          <header className="h-[52px] sm:h-[54px] px-3 sm:px-5 flex items-center justify-between gap-2 sm:gap-3 shrink-0 bg-white dark:bg-[#111114] border-b border-[#EFEFEF] dark:border-[#242429] transition-colors">
             {/* Left: Sidebar Toggle, Home, Today, Prev/Next, Month Title */}
             <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
               {(!leftOpen || viewport.isDrawerMode) && (
@@ -1488,7 +1559,7 @@ export default function App() {
                   onClick={openLeftDrawer}
                   title="Open sidebar ([)"
                   aria-label="Open sidebar"
-                  className="p-1.5 -ml-0.5 rounded-md text-[#787878] hover:text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer shrink-0"
+                  className="p-1.5 -ml-0.5 rounded-md text-[#787878] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:bg-[#F2F2F2] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer shrink-0"
                 >
                   <PanelLeft className="w-4 h-4" />
                 </button>
@@ -1499,7 +1570,7 @@ export default function App() {
                 onClick={() => navigateSurface('landing')}
                 title="Back to calendar.q overview"
                 aria-label="Back to overview"
-                className="p-1.5 rounded-md text-[#787878] hover:text-[#1A1A1A] hover:bg-[#F2F2F2] transition-colors cursor-pointer shrink-0"
+                className="p-1.5 rounded-md text-[#787878] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:bg-[#F2F2F2] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer shrink-0"
               >
                 <Home className="w-3.5 h-3.5" />
               </button>
@@ -1507,7 +1578,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleToday}
-                className="h-[30px] px-2.5 sm:px-3 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+                className="h-[30px] px-2.5 sm:px-3 rounded-[6px] border border-[#E4E4E4] dark:border-[#2C2C34] bg-white dark:bg-[#18181D] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#F4F4F5] transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
               >
                 Today
               </button>
@@ -1517,7 +1588,7 @@ export default function App() {
                   type="button"
                   onClick={handlePrev}
                   aria-label="Previous period"
-                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] dark:hover:bg-[#1E1E24] text-[#737373] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
@@ -1525,13 +1596,13 @@ export default function App() {
                   type="button"
                   onClick={handleNext}
                   aria-label="Next period"
-                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] text-[#737373] hover:text-[#1A1A1A] flex items-center justify-center transition-colors cursor-pointer"
+                  className="w-[28px] h-[28px] rounded-[6px] hover:bg-[#F2F2F2] dark:hover:bg-[#1E1E24] text-[#737373] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
 
-              <h1 className="text-[18px] sm:text-[22px] font-bold tracking-[-0.025em] text-[#1A1A1A] leading-none whitespace-nowrap truncate ml-1 sm:ml-2">
+              <h1 className="text-[18px] sm:text-[22px] font-bold tracking-[-0.025em] text-[#1A1A1A] dark:text-[#F4F4F5] leading-none whitespace-nowrap truncate ml-1 sm:ml-2">
                 {headerInfo.title}
               </h1>
 
@@ -1540,8 +1611,11 @@ export default function App() {
                   type="button"
                   onClick={() => openSettings('world')}
                   title="Configure secondary calendar display"
-                  className={`text-[12px] font-medium text-[#8C7A5B] hover:text-[#1A1A1A] truncate hidden lg:inline cursor-pointer transition-colors ${
-                    headerSubCalendar === 'gujarati-vikram' && gujaratiScript
+                  className={`text-[12px] font-medium text-[#8C7A5B] dark:text-[#D4BA8A] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] truncate hidden sm:inline cursor-pointer transition-colors ${
+                    (headerSubCalendar === 'gujarati-vikram' ||
+                      primaryCalendar === 'gujarati-vikram' ||
+                      showGujaratiCalendar) &&
+                    gujaratiScript
                       ? 'font-gujarati'
                       : ''
                   }`}
@@ -1551,45 +1625,61 @@ export default function App() {
               )}
             </div>
 
-            {/* Right: Dedicated Astronomy Button, Apps & Widgets, View Switcher, Side Panel */}
+            {/* Right: Offline/Local Sync Indicator, Astronomy, Apps & Widgets, View Switcher, Side Panel */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <OfflineSyncIndicator
+                isOnline={isOnline}
+                isExternalSyncing={googleSyncing}
+                onReconnectSync={() => {
+                  if (googleUser) {
+                    void syncGoogleCalendarData();
+                  }
+                }}
+              />
+
               {/* Separate Dedicated Astronomy Button (replaces cramped sidebar tab) */}
               <button
                 type="button"
                 onClick={() => setAstronomyOpen(true)}
                 title="Astronomy, Moon Phase, Eclipses & Meteor Showers (A)"
                 aria-label="Open Astronomy Almanac"
-                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#3A3A3A] hover:text-[#1A1A1A] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] dark:border-[#2C2C34] bg-white dark:bg-[#18181D] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] text-[12px] font-medium text-[#3A3A3A] dark:text-[#E4E4E7] hover:text-[#1A1A1A] dark:hover:text-white inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
               >
-                <Moon className="w-3.5 h-3.5 text-[#525252]" />
+                <Moon className="w-3.5 h-3.5 text-[#525252] dark:text-[#A1A1AA]" />
                 <span className="hidden md:inline">Astronomy</span>
               </button>
 
               {/* Device-Aware Desktop & Mobile App / Widget Hub */}
-              <button
-                type="button"
-                onClick={() => setDownloadHubOpen(true)}
-                title="Download Desktop / Mobile App & Widgets"
-                aria-label="Apps and Widgets"
-                className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] font-medium text-[#3A3A3A] hover:text-[#1A1A1A] inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
-              >
-                <Download className="w-3.5 h-3.5 text-[#525252]" />
-                <span className="hidden lg:inline">Apps</span>
-              </button>
+              {!pwaIsInstalled && (
+                <button
+                  type="button"
+                  onClick={() => setDownloadHubOpen(true)}
+                  title="Install Desktop / Mobile App & Widgets"
+                  aria-label="Install App and Widgets"
+                  className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs ${
+                    pwaCanInstall
+                      ? 'border-[#1A1A1A] dark:border-[#F4F4F5] bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B]'
+                      : 'border-[#E4E4E4] dark:border-[#2C2C34] bg-white dark:bg-[#18181D] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] text-[#3A3A3A] dark:text-[#E4E4E7] hover:text-[#1A1A1A] dark:hover:text-white'
+                  }`}
+                >
+                  <Download className={`w-3.5 h-3.5 ${pwaCanInstall ? 'text-white dark:text-[#09090B]' : 'text-[#525252] dark:text-[#A1A1AA]'}`} />
+                  <span className="hidden lg:inline">{pwaCanInstall ? 'Install App' : 'Apps'}</span>
+                </button>
+              )}
 
               {/* View Switcher Dropdown (defaults to Month) */}
               <div ref={viewMenuRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setViewMenuOpen((v) => !v)}
-                  className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] bg-white hover:bg-[#F5F5F5] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] inline-flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
+                  className="h-[30px] px-2 sm:px-2.5 rounded-[6px] border border-[#E4E4E4] dark:border-[#2C2C34] bg-white dark:bg-[#18181D] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] text-[12px] sm:text-[12.5px] font-medium text-[#1F1F1F] dark:text-[#F4F4F5] inline-flex items-center gap-1 sm:gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs"
                 >
                   <span>{VIEW_LABELS[effectiveViewMode]}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-[#7A7A7A]" />
+                  <ChevronDown className="w-3.5 h-3.5 text-[#7A7A7A] dark:text-[#A1A1AA]" />
                 </button>
 
                 {viewMenuOpen && (
-                  <div className="absolute right-0 mt-1.5 w-[152px] bg-white border border-[#E4E4E4] rounded-lg shadow-lg py-1 z-40">
+                  <div className="absolute right-0 mt-1.5 w-[152px] bg-white dark:bg-[#18181D] border border-[#E4E4E4] dark:border-[#2C2C34] rounded-lg shadow-lg dark:shadow-[0_12px_28px_rgba(0,0,0,0.6)] py-1 z-40">
                     {(
                       [
                         { id: 'month', label: 'Month', key: 'M' },
@@ -1603,14 +1693,14 @@ export default function App() {
                         key={opt.id}
                         type="button"
                         onClick={() => handleSelectViewMode(opt.id)}
-                        className={`w-full px-3 py-1.5 text-[12.5px] flex items-center justify-between hover:bg-[#F4F4F4] transition-colors cursor-pointer ${
+                        className={`w-full px-3 py-1.5 text-[12.5px] flex items-center justify-between hover:bg-[#F4F4F4] dark:hover:bg-[#23232A] transition-colors cursor-pointer ${
                           effectiveViewMode === opt.id
-                            ? 'font-semibold text-[#1A1A1A] bg-[#F7F7F7]'
-                            : 'text-[#4A4A4A]'
+                            ? 'font-semibold text-[#1A1A1A] dark:text-white bg-[#F7F7F7] dark:bg-[#23232A]'
+                            : 'text-[#4A4A4A] dark:text-[#D4D4D8]'
                         }`}
                       >
                         <span>{opt.label}</span>
-                        <kbd className="text-[10.5px] font-mono-tabular text-[#8C8C8C]">
+                        <kbd className="text-[10.5px] font-mono-tabular text-[#8C8C8C] dark:text-[#71717A]">
                           {opt.key}
                         </kbd>
                       </button>
@@ -1618,6 +1708,19 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {/* Direct Settings Button when left sidebar is collapsed or on tablet/mobile */}
+              {(!leftOpen || viewport.isDrawerMode) && (
+                <button
+                  type="button"
+                  onClick={() => openSettings('festivals')}
+                  title="Calendar Settings (⌘,)"
+                  aria-label="Calendar Settings"
+                  className="h-[30px] w-[30px] rounded-[6px] border border-[#E4E4E4] dark:border-[#2C2C34] bg-white dark:bg-[#18181D] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] text-[#525252] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer shadow-2xs"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </button>
+              )}
 
               {/* Side Panel Toggle */}
               <button
@@ -1627,8 +1730,8 @@ export default function App() {
                 aria-label="Toggle side panel"
                 className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs ${
                   rightOpen
-                    ? 'bg-[#F2F4F7] border-[#D1D5DB] text-[#111827]'
-                    : 'bg-white border-[#E4E4E4] text-[#4B5563] hover:bg-[#F5F5F5] hover:text-[#111827]'
+                    ? 'bg-[#F2F4F7] dark:bg-[#23232A] border-[#D1D5DB] dark:border-[#3A3A44] text-[#111827] dark:text-white'
+                    : 'bg-white dark:bg-[#18181D] border-[#E4E4E4] dark:border-[#2C2C34] text-[#4B5563] dark:text-[#D4D4D8] hover:bg-[#F5F5F5] dark:hover:bg-[#23232A] hover:text-[#111827] dark:hover:text-white'
                 }`}
               >
                 <PanelRight className="w-3.5 h-3.5" />
@@ -1812,6 +1915,14 @@ export default function App() {
       <SettingsModal
         open={settingsOpen}
         initialTab={settingsTab}
+        darkMode={darkMode}
+        onToggleDarkMode={() => {
+          setDarkMode((prev) => {
+            const next = !prev;
+            showToast(next ? 'Dark mode enabled' : 'Light mode enabled');
+            return next;
+          });
+        }}
         anchorDate={anchorDate}
         layers={layers}
         events={allEvents}
@@ -1839,11 +1950,24 @@ export default function App() {
         }}
         onSetPrimaryCalendar={(id) => {
           setPrimaryCalendar(id);
-          showToast('Primary calendar display updated');
+          const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
+          showToast(
+            id === 'gregorian'
+              ? 'Primary calendar set to Gregorian'
+              : `Primary calendar set to ${meta?.name || id}`
+          );
         }}
         onToggleWorldCalendar={handleToggleWorldCalendar}
         onEnableAllWorldCalendars={handleEnableAllWorldCalendars}
-        onSetHeaderSubCalendar={setHeaderSubCalendar}
+        onSetHeaderSubCalendar={(id) => {
+          setHeaderSubCalendar(id);
+          if (id === 'none') {
+            showToast('Sub-header calendar cleared');
+          } else {
+            const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
+            showToast(`Sub-header calendar set to ${meta?.name || id}`);
+          }
+        }}
         onSetPrimaryTz={setPrimaryTz}
         onSetSecondaryTz={setSecondaryTz}
         onSetWeatherLocationQuery={handleSetWeatherCity}
@@ -1905,11 +2029,11 @@ export default function App() {
       />
 
       {/* Footer Copyright Banner & Legal Navigation */}
-      <footer className="h-[26px] px-3 bg-[#FAFAFA] border-t border-[#EFEFEF] flex items-center justify-between text-[11px] text-[#8C8C8C] shrink-0 select-none">
+      <footer className="h-[26px] px-3 bg-[#FAFAFA] dark:bg-[#111114] border-t border-[#EFEFEF] dark:border-[#242429] flex items-center justify-between text-[11px] text-[#8C8C8C] dark:text-[#71717A] shrink-0 select-none transition-colors">
         <div className="flex items-center gap-2">
           <span>© 2026 calendar.q</span>
-          <span className="hidden md:inline text-[#D4D4D4]">·</span>
-          <span className="hidden md:inline text-[#A0A0A0]">Local-first Universal Calendar</span>
+          <span className="hidden md:inline text-[#D4D4D4] dark:text-[#3F3F46]">·</span>
+          <span className="hidden md:inline text-[#A0A0A0] dark:text-[#71717A]">Local-first Universal Calendar</span>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1918,7 +2042,7 @@ export default function App() {
               setLegalInitialDoc('privacy');
               setLegalModalOpen(true);
             }}
-            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Privacy
           </button>
@@ -1928,7 +2052,7 @@ export default function App() {
               setLegalInitialDoc('terms');
               setLegalModalOpen(true);
             }}
-            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Terms
           </button>
@@ -1938,7 +2062,7 @@ export default function App() {
               setLegalInitialDoc('data-deletion');
               setLegalModalOpen(true);
             }}
-            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Data Deletion
           </button>
@@ -1948,7 +2072,7 @@ export default function App() {
               setLegalInitialDoc('licenses');
               setLegalModalOpen(true);
             }}
-            className="hover:text-[#1A1A1A] hover:underline cursor-pointer"
+            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Licenses
           </button>
@@ -1964,7 +2088,7 @@ export default function App() {
       />
 
       {toastMsg && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] text-white dark:text-[#09090B] text-[12px] font-medium shadow-lg pointer-events-none">
           {toastMsg}
         </div>
       )}

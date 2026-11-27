@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpen, FileText, Globe, HelpCircle, Lock, Shield, X } from 'lucide-react';
 
 export type LegalDocId =
@@ -34,6 +34,12 @@ export const LegalModal: React.FC<LegalModalProps> = ({
   onClose,
 }) => {
   const [activeDoc, setActiveDoc] = useState<LegalDocId>(initialDoc);
+
+  useEffect(() => {
+    if (open) {
+      setActiveDoc(initialDoc);
+    }
+  }, [open, initialDoc]);
 
   if (!open) return null;
 

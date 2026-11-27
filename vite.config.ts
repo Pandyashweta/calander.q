@@ -13,30 +13,59 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: [
-          'icon.svg',
+          'favicon.ico',
           'favicon-16x16.png',
           'favicon-32x32.png',
           'apple-touch-icon.png',
+          'android-chrome-192x192.png',
+          'android-chrome-512x512.png',
           'pwa-192x192.png',
+          'pwa-256x256.png',
+          'pwa-384x384.png',
           'pwa-512x512.png',
+          'pwa-maskable-192x192.png',
           'pwa-maskable-512x512.png',
+          'icon.svg',
         ],
         manifest: {
           id: '/',
+          lang: 'en',
+          dir: 'ltr',
           name: 'calendar.q — Universal Calendar',
           short_name: 'calendar.q',
-          description: 'Universal calendar platform with 33 world calendars, local-first accounts, regional holidays, weather, and astronomy.',
-          start_url: '/',
+          description:
+            'Universal calendar platform with 33 world calendars, local-first accounts, regional holidays, weather, and astronomy.',
+          start_url: '/?open=calendar',
           scope: '/',
           display: 'standalone',
+          display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
           orientation: 'any',
-          theme_color: '#171717',
-          background_color: '#ffffff',
+          theme_color: '#09090B',
+          background_color: '#09090B',
+          prefer_related_applications: false,
           categories: ['productivity', 'utilities'],
+          launch_handler: {
+            client_mode: ['focus-existing', 'auto'],
+          },
+          edge_side_panel: {
+            preferred_width: 420,
+          },
           icons: [
             {
               src: '/pwa-192x192.png',
               sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-256x256.png',
+              sizes: '256x256',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: '/pwa-384x384.png',
+              sizes: '384x384',
               type: 'image/png',
               purpose: 'any',
             },
@@ -47,32 +76,118 @@ export default defineConfig(() => {
               purpose: 'any',
             },
             {
+              src: '/pwa-maskable-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
               src: '/pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
+            },
+            {
+              src: '/icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any',
+            },
+          ],
+          screenshots: [
+            {
+              src: '/screenshots/workspace-month.png',
+              sizes: '2880x1800',
+              type: 'image/png',
+              form_factor: 'wide',
+              label: 'Full-month calendar workspace with local holidays',
+            },
+            {
+              src: '/screenshots/widget-mobile.png',
+              sizes: '860x1640',
+              type: 'image/png',
+              form_factor: 'narrow',
+              label: 'Mobile calendar and home screen widget',
             },
           ],
           shortcuts: [
             {
               name: 'Open Calendar',
               short_name: 'Calendar',
+              description: 'Jump directly to your full-month calendar workspace',
               url: '/?open=calendar',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
             },
             {
               name: 'Desktop Widget',
               short_name: 'Desktop Widget',
-              url: '/?widget=desktop',
+              description: 'Open the glanceable desktop calendar widget',
+              url: '/?widget=desktop&embed=1',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
             },
             {
               name: 'Mobile Widget',
               short_name: 'Mobile Widget',
-              url: '/?widget=mobile',
+              description: 'Open the glanceable mobile calendar widget',
+              url: '/?widget=mobile&embed=1',
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+              ],
             },
           ],
-        },
+          // W3C / Windows 11 Native PWA Widgets Board declaration
+          widgets: [
+            {
+              name: 'calendar.q Today & Month',
+              short_name: 'calendar.q',
+              tag: 'calendar-q-today',
+              description: 'Glanceable today card, local holidays, and quick jump into calendar.q.',
+              ms_ac_template: '/widgets/calendar-template.json',
+              data: '/api/widget-data',
+              type: 'application/json',
+              screenshots: [
+                {
+                  src: '/screenshots/widget-desktop.png',
+                  sizes: '2880x1800',
+                  label: 'calendar.q Desktop Widget',
+                },
+              ],
+              icons: [
+                {
+                  src: '/pwa-192x192.png',
+                  sizes: '192x192',
+                  type: 'image/png',
+                },
+                {
+                  src: '/pwa-512x512.png',
+                  sizes: '512x512',
+                  type: 'image/png',
+                },
+              ],
+              update: 3600,
+              multiple: false,
+            },
+          ],
+        } as Record<string, unknown>,
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globIgnores: ['screenshots/**', 'videos/**', 'assets/aistudio/**'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
@@ -81,6 +196,20 @@ export default defineConfig(() => {
               handler: 'CacheFirst',
               options: {
                 cacheName: 'google-fonts-cache',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gstatic-fonts-cache',
                 expiration: {
                   maxEntries: 10,
                   maxAgeSeconds: 60 * 60 * 24 * 365,
