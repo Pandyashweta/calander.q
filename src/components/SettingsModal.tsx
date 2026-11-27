@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   Calendar,
   Check,
   CheckCircle2,
@@ -22,7 +23,6 @@ import {
   Sparkles,
   Sun,
   Upload,
-  X,
 } from 'lucide-react';
 import {
   CalendarEvent,
@@ -129,8 +129,9 @@ const SHORTCUT_CATEGORIES = [
 ];
 
 interface SettingsModalProps {
-  open: boolean;
+  open?: boolean;
   initialTab?: SettingsTab;
+  onSelectTab?: (tab: SettingsTab) => void;
   darkMode: boolean;
   onToggleDarkMode: () => void;
   anchorDate: Date;
@@ -242,8 +243,9 @@ export const GoogleSignInButton: React.FC<{
 );
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
-  open,
+  open = true,
   initialTab = 'festivals',
+  onSelectTab,
   darkMode,
   onToggleDarkMode,
   anchorDate,
@@ -447,111 +449,121 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!open) return null;
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 bg-black/30 dark:bg-black/65 backdrop-blur-[2px] flex items-center justify-center p-2 sm:p-4"
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Calendar Settings"
-        className="w-full max-w-[880px] h-[min(88vh,680px)] bg-white dark:bg-[#131317] border border-[#E2E2E2] dark:border-[#27272E] rounded-xl shadow-xl dark:shadow-[0_24px_60px_rgba(0,0,0,0.75)] flex flex-col overflow-hidden"
-      >
-        {/* Top Header */}
-        <div className="px-4 sm:px-5 py-3.5 border-b border-[#EFEFEF] dark:border-[#24242B] flex items-center justify-between gap-3 shrink-0 bg-white dark:bg-[#131317]">
+    <div className="h-screen w-screen bg-white dark:bg-[#131317] text-[#1A1A1A] dark:text-[#F4F4F5] flex flex-col overflow-hidden transition-colors">
+      {/* Top Header */}
+      <header className="px-4 sm:px-6 py-3.5 border-b border-[#EFEFEF] dark:border-[#24242B] flex items-center justify-between gap-3 shrink-0 bg-white dark:bg-[#131317]">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[32px] px-2.5 rounded-lg border border-[#E4E4E4] dark:border-[#2E2E36] bg-[#FAFAFA] dark:bg-[#1C1C22] hover:bg-[#F2F2F2] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Back to Calendar</span>
+            <span className="sm:hidden">Back</span>
+          </button>
+
+          <span className="h-4 w-px bg-[#E4E4E4] dark:bg-[#2E2E36] shrink-0" aria-hidden="true" />
+
           <div className="flex items-center gap-2 min-w-0">
             <SlidersHorizontal className="w-4 h-4 text-[#525252] dark:text-[#A1A1AA] shrink-0" />
-            <h2 className="text-[15px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
+            <h1 className="text-[15px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] truncate">
               Calendar Settings
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Global Dark Mode Quick Toggle in Settings Header */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={darkMode}
-              onClick={onToggleDarkMode}
-              title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              className="h-[30px] px-2.5 rounded-lg border border-[#E4E4E4] dark:border-[#2E2E36] bg-[#FAFAFA] dark:bg-[#1C1C22] hover:bg-[#F2F2F2] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              {darkMode ? (
-                <>
-                  <Moon className="w-3.5 h-3.5 text-[#F4F4F5]" />
-                  <span>Dark Mode</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-[#D97706]" />
-                  <span>Light Mode</span>
-                </>
-              )}
-              <span
-                aria-hidden="true"
-                className={`ml-0.5 inline-flex h-[15px] w-[26px] items-center rounded-full transition-colors ${
-                  darkMode ? 'bg-[#F4F4F5]' : 'bg-[#D4D4D8]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-[11px] w-[11px] rounded-full transition-transform ${
-                    darkMode
-                      ? 'translate-x-[13px] bg-[#09090B]'
-                      : 'translate-x-[2px] bg-white'
-                  }`}
-                />
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close settings"
-              className="p-1.5 rounded-md hover:bg-[#F2F2F2] dark:hover:bg-[#23232A] text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white cursor-pointer shrink-0 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            </h1>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 overflow-hidden">
-          <nav className="md:w-[216px] shrink-0 bg-[#FAFAFA] dark:bg-[#0F0F13] border-b md:border-b-0 md:border-r border-[#EFEFEF] dark:border-[#24242B] p-2 md:p-2.5 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible md:overflow-y-auto cal-scroll">
-            {(
-              [
-                { id: 'festivals', label: 'Holidays & Local', icon: Sparkles },
-                { id: 'world', label: `World Calendars (${WORLD_CALENDAR_SYSTEMS.length})`, icon: Globe },
-                { id: 'display', label: 'Display & Weather', icon: CloudSun },
-                { id: 'sync', label: 'Calendar Sync (.ics)', icon: Download },
-                { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
-                { id: 'google', label: 'Google Calendar', icon: Calendar },
-                { id: 'language', label: 'Language', icon: Languages },
-                { id: 'apps', label: 'Apps & Widgets', icon: Smartphone },
-              ] as const
-            ).map((item) => {
-              const Icon = item.icon;
-              const active = tab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setTab(item.id)}
-                  className={`md:w-full shrink-0 flex items-center gap-2 px-3 py-1.5 md:py-2 rounded-lg text-[12px] md:text-[12.5px] font-medium transition-colors text-left cursor-pointer whitespace-nowrap ${
-                    active
-                      ? 'bg-white dark:bg-[#1C1C22] text-[#1A1A1A] dark:text-[#F4F4F5] shadow-2xs border border-[#E6E6E6] dark:border-[#2E2E36]'
-                      : 'text-[#666666] dark:text-[#A1A1AA] hover:bg-[#F0F0F0] dark:hover:bg-[#18181E] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Global Dark Mode Quick Toggle in Settings Header */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={darkMode}
+            onClick={onToggleDarkMode}
+            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="h-[32px] px-2.5 rounded-lg border border-[#E4E4E4] dark:border-[#2E2E36] bg-[#FAFAFA] dark:bg-[#1C1C22] hover:bg-[#F2F2F2] dark:hover:bg-[#26262F] text-[12px] font-medium text-[#1A1A1A] dark:text-[#F4F4F5] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            {darkMode ? (
+              <>
+                <Moon className="w-3.5 h-3.5 text-[#F4F4F5]" />
+                <span>Dark Mode</span>
+              </>
+            ) : (
+              <>
+                <Sun className="w-3.5 h-3.5 text-[#D97706]" />
+                <span>Light Mode</span>
+              </>
+            )}
+            <span
+              aria-hidden="true"
+              className={`ml-0.5 inline-flex h-[15px] w-[26px] items-center rounded-full transition-colors ${
+                darkMode ? 'bg-[#F4F4F5]' : 'bg-[#D4D4D8]'
+              }`}
+            >
+              <span
+                className={`inline-block h-[11px] w-[11px] rounded-full transition-transform ${
+                  darkMode
+                    ? 'translate-x-[13px] bg-[#09090B]'
+                    : 'translate-x-[2px] bg-white'
+                }`}
+              />
+            </span>
+          </button>
 
-          {/* Active Tab Panel */}
-          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden cal-scroll p-4 sm:p-6 bg-white dark:bg-[#131317] text-[#1A1A1A] dark:text-[#F4F4F5]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-[32px] px-3 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B] text-[12px] font-medium cursor-pointer shrink-0 transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </header>
+
+      {/* Full-Page Body */}
+      <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0 overflow-hidden">
+        <nav
+          aria-label="Settings sections"
+          className="md:w-[248px] shrink-0 bg-[#FAFAFA] dark:bg-[#0F0F13] border-b md:border-b-0 md:border-r border-[#EFEFEF] dark:border-[#24242B] p-2.5 md:p-3.5 flex md:flex-col gap-1 overflow-x-auto md:overflow-x-visible md:overflow-y-auto cal-scroll"
+        >
+          {(
+            [
+              { id: 'festivals', label: 'Holidays & Local', icon: Sparkles },
+              { id: 'world', label: `World Calendars (${WORLD_CALENDAR_SYSTEMS.length})`, icon: Globe },
+              { id: 'display', label: 'Display & Weather', icon: CloudSun },
+              { id: 'sync', label: 'Calendar Sync (.ics)', icon: Download },
+              { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
+              { id: 'google', label: 'Google Calendar', icon: Calendar },
+              { id: 'language', label: 'Language', icon: Languages },
+              { id: 'apps', label: 'Apps & Widgets', icon: Smartphone },
+            ] as const
+          ).map((item) => {
+            const Icon = item.icon;
+            const active = tab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setTab(item.id);
+                  onSelectTab?.(item.id);
+                }}
+                className={`md:w-full shrink-0 flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12.5px] font-medium transition-colors text-left cursor-pointer whitespace-nowrap ${
+                  active
+                    ? 'bg-white dark:bg-[#1C1C22] text-[#1A1A1A] dark:text-[#F4F4F5] shadow-2xs border border-[#E6E6E6] dark:border-[#2E2E36]'
+                    : 'text-[#666666] dark:text-[#A1A1AA] hover:bg-[#F0F0F0] dark:hover:bg-[#18181E] hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] border border-transparent'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Active Tab Panel */}
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden cal-scroll p-4 sm:p-7 md:p-8 bg-white dark:bg-[#131317] text-[#1A1A1A] dark:text-[#F4F4F5]">
+          <div className="max-w-[780px] w-full">
             {/* ==================== TAB 1: HOLIDAYS & LOCAL ==================== */}
             {tab === 'festivals' && (
               <div className="space-y-5 min-w-0">
@@ -637,13 +649,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   })}
                 </div>
 
-                {/* Local Personal & Custom Calendar Categories */}
+                {/* Personal & Custom Calendar Categories */}
                 <div className="pt-4 border-t border-[#EFEFEF] dark:border-[#24242B] space-y-2">
                   <h4 className="text-[12.5px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
-                    My Local Calendars ({localLayers.length})
+                    My Calendars ({localLayers.length})
                   </h4>
                   <p className="text-[11.5px] text-[#7A7A7A] dark:text-[#A1A1AA]">
-                    Stored privately on this device. Enable any personal category when you need it.
+                    Enable any personal category when you need it.
                   </p>
                   <div className="divide-y divide-[#F2F2F2] dark:divide-[#24242B]">
                     {localLayers.map((layer) => {
@@ -902,7 +914,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Appearance
                     </h3>
                     <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
-                      Choose between light and dark workspace themes. Saved automatically on this device.
+                      Choose between light and dark workspace themes.
                     </p>
                   </div>
 
@@ -1186,7 +1198,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </h4>
                   </div>
                   <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA]">
-                    Imported events are saved locally on this device inside your Personal Events calendar.
+                    Imported events are added directly into your Personal Events calendar.
                   </p>
 
                   <input
@@ -1547,10 +1559,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {onOpenDownloadHub && (
                   <button
                     type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenDownloadHub();
-                    }}
+                    onClick={() => onOpenDownloadHub()}
                     className="px-4 py-2.5 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B] text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
                   >
                     <Download className="w-4 h-4" />
@@ -1560,7 +1569,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
     </div>
   );

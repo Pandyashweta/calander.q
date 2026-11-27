@@ -243,20 +243,24 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
       <div className="h-[44px] px-3.5 flex items-center justify-between shrink-0">
         {isDrawer ? (
           <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-[6px] overflow-hidden bg-black flex items-center justify-center shrink-0">
-              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
-            </span>
+            <img
+              src="/android-chrome-192x192.png"
+              alt=""
+              className="w-[18px] h-[18px] object-contain shrink-0 invert dark:invert-0"
+            />
             <span className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] tracking-tight">
-              calendar<span className="text-[#DC2626]">.q</span>
+              Calander<span className="text-[#DC2626]">.Q</span>
             </span>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-[6px] overflow-hidden bg-black flex items-center justify-center shrink-0">
-              <img src="/android-chrome-192x192.png" alt="" className="w-full h-full object-cover scale-[1.38]" />
-            </span>
+            <img
+              src="/android-chrome-192x192.png"
+              alt=""
+              className="w-[18px] h-[18px] object-contain shrink-0 invert dark:invert-0"
+            />
             <span className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5] tracking-tight">
-              calendar<span className="text-[#DC2626]">.q</span>
+              Calander<span className="text-[#DC2626]">.Q</span>
             </span>
           </div>
         )}
@@ -481,8 +485,8 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <button
               type="button"
               onClick={() => setShowAddCustom((v) => !v)}
-              title="Add custom local calendar"
-              aria-label="Add custom local calendar"
+              title="Add custom calendar"
+              aria-label="Add custom calendar"
               className="p-1 rounded text-[#7A7A7A] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white hover:bg-[#ECECEC] dark:hover:bg-[#1E1E24] transition-colors cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />

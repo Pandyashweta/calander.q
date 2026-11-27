@@ -77,10 +77,16 @@ import { useViewport } from './hooks/useViewport';
 import { useOnlineStatus, usePWAInstall } from './hooks/usePWAInstall';
 import { AuthModal, AuthModalTab } from './components/AuthModal';
 import { LegalDocId, LegalModal } from './components/LegalModal';
+import { AboutPage } from './components/AboutPage';
 import {
   fetchCurrentAccount,
+  fetchSyncedEventsApi,
+  fetchSyncedPreferencesApi,
   getStoredUser,
+  isLocalModeAllowed,
   oauthApi,
+  saveSyncedEventsApi,
+  saveSyncedPreferencesApi,
 } from './services/authClient';
 import {
   DailyForecastItem,
@@ -98,7 +104,7 @@ const STORAGE_LAYERS_KEY = 'calendar_q_layers_v3';
 const STORAGE_PREFS_KEY = 'calendar_q_prefs_v3';
 const STORAGE_THEME_KEY = 'calendar_q_theme_v1';
 
-type AppSurface = 'landing' | 'calendar' | 'widget-desktop' | 'widget-mobile';
+type AppSurface = 'landing' | 'about' | 'download' | 'legal' | 'settings' | 'calendar' | 'widget-desktop' | 'widget-mobile';
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   day: 'Day',
@@ -114,6 +120,10 @@ function getInitialSurface(): AppSurface {
   const widget = params.get('widget');
   if (widget === 'desktop') return 'widget-desktop';
   if (widget === 'mobile') return 'widget-mobile';
+  if (params.get('page') === 'about') return 'about';
+  if (params.get('page') === 'legal') return 'legal';
+  if (params.get('page') === 'settings') return 'settings';
+  if (params.get('page') === 'download' || params.get('install') === '1') return 'download';
   if (params.get('open') === 'calendar') return 'calendar';
   return 'landing';
 }
@@ -155,7 +165,14 @@ export default function App() {
 
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeMeta) {
-      themeMeta.content = darkMode || appSurface === 'landing' ? '#09090B' : '#FFFFFF';
+      themeMeta.content =
+        darkMode ||
+        appSurface === 'landing' ||
+        appSurface === 'about' ||
+        appSurface === 'download' ||
+        appSurface === 'legal'
+          ? '#0A0908'
+          : '#FFFFFF';
     }
   }, [darkMode, appSurface]);
 
@@ -178,21 +195,38 @@ export default function App() {
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
 
   // Sync URL query cleanly when moving between surfaces
-  const navigateSurface = useCallback((next: AppSurface) => {
-    setAppSurface(next);
-    if (typeof window === 'undefined') return;
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('widget');
-      url.searchParams.delete('open');
-      if (next === 'widget-desktop') url.searchParams.set('widget', 'desktop');
-      else if (next === 'widget-mobile') url.searchParams.set('widget', 'mobile');
-      else if (next === 'calendar') url.searchParams.set('open', 'calendar');
-      window.history.replaceState({}, '', url.toString());
-    } catch {
-      // ignore sandboxed history restrictions
-    }
-  }, []);
+  const navigateSurface = useCallback(
+    (next: AppSurface, legalDoc?: LegalDocId, nextSettingsTab?: SettingsTab) => {
+      setAppSurface(next);
+      if (legalDoc) setLegalInitialDoc(legalDoc);
+      if (nextSettingsTab) setSettingsTab(nextSettingsTab);
+      if (typeof window === 'undefined') return;
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('widget');
+        url.searchParams.delete('open');
+        url.searchParams.delete('page');
+        url.searchParams.delete('install');
+        url.searchParams.delete('doc');
+        url.searchParams.delete('tab');
+        if (next === 'widget-desktop') url.searchParams.set('widget', 'desktop');
+        else if (next === 'widget-mobile') url.searchParams.set('widget', 'mobile');
+        else if (next === 'about') url.searchParams.set('page', 'about');
+        else if (next === 'download') url.searchParams.set('page', 'download');
+        else if (next === 'settings') {
+          url.searchParams.set('page', 'settings');
+          if (nextSettingsTab) url.searchParams.set('tab', nextSettingsTab);
+        } else if (next === 'legal') {
+          url.searchParams.set('page', 'legal');
+          if (legalDoc) url.searchParams.set('doc', legalDoc);
+        } else if (next === 'calendar') url.searchParams.set('open', 'calendar');
+        window.history.replaceState({}, '', url.toString());
+      } catch {
+        // ignore sandboxed history restrictions
+      }
+    },
+    []
+  );
 
   // Automatic midnight detection & daylight saving update
   useEffect(() => {
@@ -231,40 +265,43 @@ export default function App() {
 
   // Clean v3 layer initialization: ONLY local holidays ('national-holidays') is checked by default
   const [layers, setLayers] = useState<CalendarLayer[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_LAYERS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const initialById = new Map(INITIAL_LAYERS.map((l) => [l.id, l]));
-          const normalized = parsed.map((l: CalendarLayer) => {
-            const base = initialById.get(l.id);
-            // Keep latest groupId/name organization from INITIAL_LAYERS while preserving visibility
-            return base ? { ...base, visible: Boolean(l.visible) } : l;
-          });
-          const savedIds = new Set(normalized.map((l: CalendarLayer) => l.id));
-          const missingInitial = INITIAL_LAYERS.filter((l) => !savedIds.has(l.id));
-          return [...normalized, ...missingInitial];
+    if (isLocalModeAllowed()) {
+      try {
+        const saved = localStorage.getItem(STORAGE_LAYERS_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const initialById = new Map(INITIAL_LAYERS.map((l) => [l.id, l]));
+            const normalized = parsed.map((l: CalendarLayer) => {
+              const base = initialById.get(l.id);
+              return base ? { ...base, visible: Boolean(l.visible) } : l;
+            });
+            const savedIds = new Set(normalized.map((l: CalendarLayer) => l.id));
+            const missingInitial = INITIAL_LAYERS.filter((l) => !savedIds.has(l.id));
+            return [...normalized, ...missingInitial];
+          }
         }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
     return INITIAL_LAYERS;
   });
 
-  // Local events stored exclusively on the user's device (starts cleanly empty)
+  // Personal events: stored locally ONLY inside the downloaded app; synced via account on web
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>(() => {
-    try {
-      const saved =
-        localStorage.getItem(STORAGE_EVENTS_KEY) ||
-        localStorage.getItem('calendar_q_events_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved) as CalendarEvent[];
-        if (Array.isArray(parsed)) return parsed;
+    if (isLocalModeAllowed()) {
+      try {
+        const saved =
+          localStorage.getItem(STORAGE_EVENTS_KEY) ||
+          localStorage.getItem('calendar_q_events_v2');
+        if (saved) {
+          const parsed = JSON.parse(saved) as CalendarEvent[];
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
     }
     return buildInitialEvents();
   });
@@ -279,139 +316,72 @@ export default function App() {
   const [mutationBusy, setMutationBusy] = useState(false);
 
   // Location-aware Holiday Region (auto-detected from browser timezone & locale)
-  const [holidayRegion, setHolidayRegion] = useState<HolidayRegionCode>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved) {
-        const reg = JSON.parse(saved).holidayRegion;
-        if (typeof reg === 'string' && reg.length >= 2) {
-          return reg as HolidayRegionCode;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return detectLocalHolidayRegion();
-  });
-
-  const [primaryCalendar, setPrimaryCalendar] = useState<WorldCalendarSystemId>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved && JSON.parse(saved).primaryCalendar) {
-        return JSON.parse(saved).primaryCalendar;
-      }
-    } catch {
-      // ignore
-    }
-    return 'gregorian';
-  });
-
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved && JSON.parse(saved).selectedLanguage) {
-        return JSON.parse(saved).selectedLanguage;
-      }
-    } catch {
-      // ignore
-    }
-    return 'en';
-  });
-
-  const [gujaratiScript, setGujaratiScript] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved) return Boolean(JSON.parse(saved).gujaratiScript);
-    } catch {
-      // ignore
-    }
-    return false;
-  });
-
-  const [enabledWorldCalendars, setEnabledWorldCalendars] = useState<
-    WorldCalendarSystemId[]
-  >(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved) {
-        const arr = JSON.parse(saved).enabledWorldCalendars;
-        if (Array.isArray(arr)) return arr;
-      }
-    } catch {
-      // ignore
-    }
-    return DEFAULT_ENABLED_WORLD_CALENDARS;
-  });
-
-  const [headerSubCalendar, setHeaderSubCalendar] = useState<
-    WorldCalendarSystemId | 'none'
-  >(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved && JSON.parse(saved).headerSubCalendar) {
-        return JSON.parse(saved).headerSubCalendar;
-      }
-    } catch {
-      // ignore
-    }
-    return 'none';
-  });
-
-  const [primaryTz, setPrimaryTz] = useState<TimezoneOption>(() => {
+  const readAppLocalPref = <T,>(key: string, fallback: T): T => {
+    if (!isLocalModeAllowed()) return fallback;
     try {
       const saved = localStorage.getItem(STORAGE_PREFS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed.primaryTzId) {
-          const found = TIMEZONE_OPTIONS.find((t) => t.id === parsed.primaryTzId);
-          if (found) return found;
-        }
+        if (parsed && parsed[key] !== undefined) return parsed[key] as T;
       }
     } catch {
       // ignore
     }
-    return getLocalDeviceTimezoneOption();
+    return fallback;
+  };
+
+  const [holidayRegion, setHolidayRegion] = useState<HolidayRegionCode>(() => {
+    const reg = readAppLocalPref<string>('holidayRegion', '');
+    return typeof reg === 'string' && reg.length >= 2
+      ? (reg as HolidayRegionCode)
+      : detectLocalHolidayRegion();
+  });
+
+  const [primaryCalendar, setPrimaryCalendar] = useState<WorldCalendarSystemId>(() =>
+    readAppLocalPref<WorldCalendarSystemId>('primaryCalendar', 'gregorian')
+  );
+
+  const [selectedLanguage, setSelectedLanguage] = useState<string>(() =>
+    readAppLocalPref<string>('selectedLanguage', 'en')
+  );
+
+  const [gujaratiScript, setGujaratiScript] = useState<boolean>(() =>
+    Boolean(readAppLocalPref<boolean>('gujaratiScript', false))
+  );
+
+  const [enabledWorldCalendars, setEnabledWorldCalendars] = useState<
+    WorldCalendarSystemId[]
+  >(() => {
+    const arr = readAppLocalPref<WorldCalendarSystemId[] | null>('enabledWorldCalendars', null);
+    return Array.isArray(arr) ? arr : DEFAULT_ENABLED_WORLD_CALENDARS;
+  });
+
+  const [headerSubCalendar, setHeaderSubCalendar] = useState<
+    WorldCalendarSystemId | 'none'
+  >(() => readAppLocalPref<WorldCalendarSystemId | 'none'>('headerSubCalendar', 'none'));
+
+  const [primaryTz, setPrimaryTz] = useState<TimezoneOption>(() => {
+    const id = readAppLocalPref<string>('primaryTzId', '');
+    const found = id ? TIMEZONE_OPTIONS.find((t) => t.id === id) : undefined;
+    return found || getLocalDeviceTimezoneOption();
   });
 
   const [secondaryTz, setSecondaryTz] = useState<TimezoneOption>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved) {
-        const id = JSON.parse(saved).secondaryTzId;
-        const found = TIMEZONE_OPTIONS.find((t) => t.id === id);
-        if (found) return found;
-      }
-    } catch {
-      // ignore
-    }
-    return TIMEZONE_OPTIONS.find((t) => t.id === 'UTC') || TIMEZONE_OPTIONS[0];
+    const id = readAppLocalPref<string>('secondaryTzId', '');
+    const found = id ? TIMEZONE_OPTIONS.find((t) => t.id === id) : undefined;
+    return found || TIMEZONE_OPTIONS.find((t) => t.id === 'UTC') || TIMEZONE_OPTIONS[0];
   });
 
   // Weather preferences (location-aware from local timezone unless customized)
   const [weatherUnits, setWeatherUnits] = useState<WeatherUnits>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved) {
-        const u = JSON.parse(saved).weatherUnits;
-        if (u === 'IMPERIAL' || u === 'METRIC') return u;
-      }
-    } catch {
-      // ignore
-    }
+    const u = readAppLocalPref<string>('weatherUnits', '');
+    if (u === 'IMPERIAL' || u === 'METRIC') return u;
     return detectLocalHolidayRegion() === 'US' ? 'IMPERIAL' : 'METRIC';
   });
 
   const [customWeatherCity, setCustomWeatherCity] = useState<string | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFS_KEY);
-      if (saved && typeof JSON.parse(saved).customWeatherCity === 'string') {
-        const city = JSON.parse(saved).customWeatherCity.trim();
-        return city || null;
-      }
-    } catch {
-      // ignore
-    }
-    return null;
+    const city = readAppLocalPref<string>('customWeatherCity', '').trim();
+    return city || null;
   });
 
   const [geoLocation, setGeoLocation] = useState<ResolvedLocation | null>(null);
@@ -429,25 +399,46 @@ export default function App() {
   const [shareMode, setShareMode] = useState(false);
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('festivals');
-  const [astronomyOpen, setAstronomyOpen] = useState(false);
-  const [downloadHubOpen, setDownloadHubOpen] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('install') === '1';
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>(() => {
+    if (typeof window === 'undefined') return 'festivals';
+    const t = new URLSearchParams(window.location.search).get('tab') as SettingsTab | null;
+    const valid: SettingsTab[] = ['festivals', 'world', 'display', 'sync', 'shortcuts', 'google', 'language', 'apps'];
+    return t && valid.includes(t) ? t : 'festivals';
   });
+  const [astronomyOpen, setAstronomyOpen] = useState(false);
   const { canInstall: pwaCanInstall, isInstalled: pwaIsInstalled } = usePWAInstall();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authInitialTab, setAuthInitialTab] = useState<AuthModalTab>('signin');
-  const [legalModalOpen, setLegalModalOpen] = useState(false);
-  const [legalInitialDoc, setLegalInitialDoc] = useState<LegalDocId>('privacy');
+  const [legalInitialDoc, setLegalInitialDoc] = useState<LegalDocId>(() => {
+    if (typeof window === 'undefined') return 'privacy';
+    const d = new URLSearchParams(window.location.search).get('doc') as LegalDocId | null;
+    return d || 'privacy';
+  });
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => getStoredUser());
 
   useEffect(() => {
     fetchCurrentAccount().then((user) => {
-      if (user) setCurrentUser(user);
+      if (user) {
+        setCurrentUser(user);
+        if (!isLocalModeAllowed()) {
+          void fetchSyncedEventsApi().then((synced) => {
+            if (synced.length > 0) setLocalEvents(synced);
+          });
+          void fetchSyncedPreferencesApi().then((prefs) => {
+            if (typeof prefs.holidayRegion === 'string') {
+              setHolidayRegion(prefs.holidayRegion as HolidayRegionCode);
+            }
+            if (typeof prefs.primaryCalendar === 'string') {
+              setPrimaryCalendar(prefs.primaryCalendar as WorldCalendarSystemId);
+            }
+            if (Array.isArray(prefs.enabledWorldCalendars)) {
+              setEnabledWorldCalendars(prefs.enabledWorldCalendars as WorldCalendarSystemId[]);
+            }
+          });
+        }
+      }
     });
   }, []);
 
@@ -493,7 +484,7 @@ export default function App() {
       setLayers((prev) =>
         prev.map((l) => (l.id === 'personal' ? { ...l, visible: true } : l))
       );
-      showToast(`Imported ${imported.length} events to this device`);
+      showToast(`Imported ${imported.length} events`);
     },
     [showToast]
   );
@@ -515,53 +506,64 @@ export default function App() {
     [showToast]
   );
 
-  const openSettings = useCallback((tab: SettingsTab = 'festivals') => {
-    setSettingsTab(tab);
-    setSettingsOpen(true);
-  }, []);
+  const openSettings = useCallback(
+    (tab: SettingsTab = 'festivals') => {
+      navigateSurface('settings', undefined, tab);
+    },
+    [navigateSurface]
+  );
 
   const allEvents = useMemo(
     () => [...localEvents, ...googleEvents],
     [localEvents, googleEvents]
   );
 
-  // Persist local events, non-Google layer toggles, and preferences locally on device
+  // Persist events, layers, and preferences locally ONLY inside the downloaded app;
+  // on the main website, sync exclusively to the signed-in server account.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(localEvents));
-    } catch {
-      // ignore
+    if (pwaIsInstalled) {
+      try {
+        localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(localEvents));
+      } catch {
+        // ignore
+      }
+    } else if (currentUser) {
+      void saveSyncedEventsApi(localEvents);
     }
-  }, [localEvents]);
+  }, [localEvents, pwaIsInstalled, currentUser]);
 
   useEffect(() => {
+    if (!pwaIsInstalled) return;
     try {
       const nonGoogle = layers.filter((l) => l.type !== 'google');
       localStorage.setItem(STORAGE_LAYERS_KEY, JSON.stringify(nonGoogle));
     } catch {
       // ignore
     }
-  }, [layers]);
+  }, [layers, pwaIsInstalled]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_PREFS_KEY,
-        JSON.stringify({
-          holidayRegion,
-          primaryCalendar,
-          selectedLanguage,
-          gujaratiScript,
-          enabledWorldCalendars,
-          headerSubCalendar,
-          primaryTzId: primaryTz.id,
-          secondaryTzId: secondaryTz.id,
-          weatherUnits,
-          customWeatherCity,
-        })
-      );
-    } catch {
-      // ignore
+    const prefsPayload = {
+      holidayRegion,
+      primaryCalendar,
+      selectedLanguage,
+      gujaratiScript,
+      enabledWorldCalendars,
+      headerSubCalendar,
+      primaryTzId: primaryTz.id,
+      secondaryTzId: secondaryTz.id,
+      weatherUnits,
+      customWeatherCity,
+    };
+
+    if (pwaIsInstalled) {
+      try {
+        localStorage.setItem(STORAGE_PREFS_KEY, JSON.stringify(prefsPayload));
+      } catch {
+        // ignore
+      }
+    } else if (currentUser) {
+      void saveSyncedPreferencesApi(prefsPayload);
     }
   }, [
     holidayRegion,
@@ -574,6 +576,8 @@ export default function App() {
     secondaryTz,
     weatherUnits,
     customWeatherCity,
+    pwaIsInstalled,
+    currentUser,
   ]);
 
   useEffect(() => {
@@ -1177,7 +1181,7 @@ export default function App() {
       };
       setLocalEvents((prev) => [...prev, copy]);
       setSelection({ kind: 'event', eventId: copy.id });
-      showToast('Event duplicated locally');
+      showToast('Event duplicated');
     },
     [showToast]
   );
@@ -1250,7 +1254,7 @@ export default function App() {
 
   // Global keyboard shortcuts (active in calendar workspace)
   useEffect(() => {
-    if (appSurface !== 'calendar') return;
+    if (appSurface !== 'calendar' && appSurface !== 'settings') return;
 
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -1261,9 +1265,21 @@ export default function App() {
           target.tagName === 'SELECT' ||
           target.isContentEditable);
 
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setActiveModal(null);
+        if (appSurface === 'settings') {
+          navigateSurface('calendar');
+        } else {
+          openSettings(settingsTab);
+        }
+        return;
+      }
+
+      if (appSurface !== 'calendar') return;
+
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setSettingsOpen(false);
         setActiveModal((prev) => (prev === 'command' ? null : 'command'));
         return;
       }
@@ -1271,13 +1287,6 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
         e.preventDefault();
         openSettings('sync');
-        return;
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        setActiveModal(null);
-        setSettingsOpen((prev) => !prev);
         return;
       }
 
@@ -1290,12 +1299,9 @@ export default function App() {
       if (
         isInput ||
         activeModal ||
-        settingsOpen ||
         astronomyOpen ||
-        downloadHubOpen ||
         pendingMutation ||
-        authModalOpen ||
-        legalModalOpen
+        authModalOpen
       ) {
         return;
       }
@@ -1361,13 +1367,12 @@ export default function App() {
   }, [
     appSurface,
     activeModal,
-    settingsOpen,
+    settingsTab,
     astronomyOpen,
-    downloadHubOpen,
     pendingMutation,
     authModalOpen,
-    legalModalOpen,
     handleToday,
+    navigateSurface,
     openSettings,
     handleToggleAllCultural,
     handleToggleLayer,
@@ -1417,7 +1422,155 @@ export default function App() {
     );
   }
 
-  // ========= SURFACE 2: LANDING PAGE =========
+  // ========= SURFACE 2: DEDICATED ABOUT PAGE =========
+  if (appSurface === 'about') {
+    return (
+      <>
+        <AboutPage
+          onBack={() => navigateSurface('landing')}
+          onOpenCalendar={() => navigateSurface('calendar')}
+          onOpenDownloadHub={() => navigateSurface('download')}
+          onOpenLegal={(doc) => navigateSurface('legal', doc)}
+          onOpenAbout={() => navigateSurface('about')}
+        />
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 3: DEDICATED LEGAL & COMPLIANCE PAGE =========
+  if (appSurface === 'legal') {
+    return (
+      <>
+        <LegalModal
+          initialDoc={legalInitialDoc}
+          onBack={() => navigateSurface('landing')}
+          onOpenCalendar={() => navigateSurface('calendar')}
+          onOpenAbout={() => navigateSurface('about')}
+          onOpenDownloadHub={() => navigateSurface('download')}
+          onSelectDoc={(doc) => navigateSurface('legal', doc)}
+        />
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 4: DEDICATED DOWNLOAD & WIDGETS PAGE =========
+  if (appSurface === 'download') {
+    return (
+      <>
+        <AppDownloadHub
+          onBack={() => navigateSurface('landing')}
+          onOpenCalendar={() => navigateSurface('calendar')}
+          onLaunchWidget={(mode) =>
+            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
+          }
+          onOpenLegal={(doc) => navigateSurface('legal', doc)}
+          onOpenAbout={() => navigateSurface('about')}
+          showToast={showToast}
+        />
+
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 5: DEDICATED CALENDAR SETTINGS PAGE =========
+  if (appSurface === 'settings') {
+    return (
+      <>
+        <SettingsModal
+          open={true}
+          initialTab={settingsTab}
+          onSelectTab={(tab) => navigateSurface('settings', undefined, tab)}
+          darkMode={darkMode}
+          onToggleDarkMode={() => {
+            setDarkMode((prev) => {
+              const next = !prev;
+              showToast(next ? 'Dark mode enabled' : 'Light mode enabled');
+              return next;
+            });
+          }}
+          anchorDate={anchorDate}
+          layers={layers}
+          events={allEvents}
+          gujaratiScript={gujaratiScript}
+          holidayRegion={holidayRegion}
+          primaryCalendar={primaryCalendar}
+          enabledWorldCalendars={enabledWorldCalendars}
+          headerSubCalendar={headerSubCalendar}
+          selectedLanguage={selectedLanguage}
+          onSelectLanguage={handleSelectLanguage}
+          primaryTz={primaryTz}
+          secondaryTz={secondaryTz}
+          googleUser={googleUser}
+          googleSyncing={googleSyncing}
+          googleError={googleError}
+          weatherLocationQuery={weatherLocationQuery}
+          weatherUnits={weatherUnits}
+          onClose={() => navigateSurface('calendar')}
+          onToggleLayer={handleToggleLayer}
+          onToggleAllCultural={handleToggleAllCultural}
+          onToggleGujaratiScript={() => setGujaratiScript((v) => !v)}
+          onSetHolidayRegion={(reg) => {
+            setHolidayRegion(reg);
+            showToast(`Local holidays set to ${reg}`);
+          }}
+          onSetPrimaryCalendar={(id) => {
+            setPrimaryCalendar(id);
+            const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
+            showToast(
+              id === 'gregorian'
+                ? 'Primary calendar set to Gregorian'
+                : `Primary calendar set to ${meta?.name || id}`
+            );
+          }}
+          onToggleWorldCalendar={handleToggleWorldCalendar}
+          onEnableAllWorldCalendars={handleEnableAllWorldCalendars}
+          onSetHeaderSubCalendar={(id) => {
+            setHeaderSubCalendar(id);
+            if (id === 'none') {
+              showToast('Sub-header calendar cleared');
+            } else {
+              const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
+              showToast(`Sub-header calendar set to ${meta?.name || id}`);
+            }
+          }}
+          onSetPrimaryTz={setPrimaryTz}
+          onSetSecondaryTz={setSecondaryTz}
+          onSetWeatherLocationQuery={handleSetWeatherCity}
+          onSetWeatherUnits={setWeatherUnits}
+          onUseWeatherGeolocation={handleUseWeatherGeolocation}
+          onGoogleSignIn={() => void handleGoogleSignIn()}
+          onGoogleSync={() => void syncGoogleCalendarData()}
+          onGoogleLogout={handleGoogleLogout}
+          onImportEvents={handleImportEvents}
+          onOpenDownloadHub={() => navigateSurface('download')}
+          showToast={showToast}
+        />
+
+        {toastMsg && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
+            {toastMsg}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ========= SURFACE 6: LANDING PAGE =========
   if (appSurface === 'landing') {
     return (
       <>
@@ -1427,14 +1580,12 @@ export default function App() {
           currentUser={currentUser}
           onOpenCalendar={() => navigateSurface('calendar')}
           onOpenAuth={(tab) => handleOpenAuth(tab)}
-          onOpenDownloadHub={() => setDownloadHubOpen(true)}
+          onOpenDownloadHub={() => navigateSurface('download')}
+          onOpenAbout={() => navigateSurface('about')}
           onLaunchWidget={(mode) =>
             navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
           }
-          onOpenLegal={(doc) => {
-            setLegalInitialDoc(doc);
-            setLegalModalOpen(true);
-          }}
+          onOpenLegal={(doc) => navigateSurface('legal', doc)}
           showToast={showToast}
         />
 
@@ -1447,22 +1598,6 @@ export default function App() {
           onGoogleSignIn={handleGoogleSignIn}
           googleSyncing={googleSyncing}
           showToast={showToast}
-        />
-
-        <AppDownloadHub
-          open={downloadHubOpen}
-          onClose={() => setDownloadHubOpen(false)}
-          onLaunchWidget={(mode) => {
-            setDownloadHubOpen(false);
-            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile');
-          }}
-          showToast={showToast}
-        />
-
-        <LegalModal
-          open={legalModalOpen}
-          onClose={() => setLegalModalOpen(false)}
-          initialDoc={legalInitialDoc}
         />
 
         {toastMsg && (
@@ -1543,7 +1678,7 @@ export default function App() {
             }}
             onOpenDownloadHub={() => {
               if (viewport.isDrawerMode) setLeftOpen(false);
-              setDownloadHubOpen(true);
+              navigateSurface('download');
             }}
           />
         )}
@@ -1629,6 +1764,7 @@ export default function App() {
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <OfflineSyncIndicator
                 isOnline={isOnline}
+                allowLocalMode={pwaIsInstalled}
                 isExternalSyncing={googleSyncing}
                 onReconnectSync={() => {
                   if (googleUser) {
@@ -1653,7 +1789,7 @@ export default function App() {
               {!pwaIsInstalled && (
                 <button
                   type="button"
-                  onClick={() => setDownloadHubOpen(true)}
+                  onClick={() => navigateSurface('download')}
                   title="Install Desktop / Mobile App & Widgets"
                   aria-label="Install App and Widgets"
                   className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs ${
@@ -1911,79 +2047,6 @@ export default function App() {
         onSetSecondaryTz={setSecondaryTz}
       />
 
-      {/* Consolidated Settings Modal (Holidays, World Calendars, Display, .ics Sync, Shortcuts, Google, Language, Apps) */}
-      <SettingsModal
-        open={settingsOpen}
-        initialTab={settingsTab}
-        darkMode={darkMode}
-        onToggleDarkMode={() => {
-          setDarkMode((prev) => {
-            const next = !prev;
-            showToast(next ? 'Dark mode enabled' : 'Light mode enabled');
-            return next;
-          });
-        }}
-        anchorDate={anchorDate}
-        layers={layers}
-        events={allEvents}
-        gujaratiScript={gujaratiScript}
-        holidayRegion={holidayRegion}
-        primaryCalendar={primaryCalendar}
-        enabledWorldCalendars={enabledWorldCalendars}
-        headerSubCalendar={headerSubCalendar}
-        selectedLanguage={selectedLanguage}
-        onSelectLanguage={handleSelectLanguage}
-        primaryTz={primaryTz}
-        secondaryTz={secondaryTz}
-        googleUser={googleUser}
-        googleSyncing={googleSyncing}
-        googleError={googleError}
-        weatherLocationQuery={weatherLocationQuery}
-        weatherUnits={weatherUnits}
-        onClose={() => setSettingsOpen(false)}
-        onToggleLayer={handleToggleLayer}
-        onToggleAllCultural={handleToggleAllCultural}
-        onToggleGujaratiScript={() => setGujaratiScript((v) => !v)}
-        onSetHolidayRegion={(reg) => {
-          setHolidayRegion(reg);
-          showToast(`Local holidays set to ${reg}`);
-        }}
-        onSetPrimaryCalendar={(id) => {
-          setPrimaryCalendar(id);
-          const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
-          showToast(
-            id === 'gregorian'
-              ? 'Primary calendar set to Gregorian'
-              : `Primary calendar set to ${meta?.name || id}`
-          );
-        }}
-        onToggleWorldCalendar={handleToggleWorldCalendar}
-        onEnableAllWorldCalendars={handleEnableAllWorldCalendars}
-        onSetHeaderSubCalendar={(id) => {
-          setHeaderSubCalendar(id);
-          if (id === 'none') {
-            showToast('Sub-header calendar cleared');
-          } else {
-            const meta = WORLD_CALENDAR_SYSTEMS.find((s) => s.id === id);
-            showToast(`Sub-header calendar set to ${meta?.name || id}`);
-          }
-        }}
-        onSetPrimaryTz={setPrimaryTz}
-        onSetSecondaryTz={setSecondaryTz}
-        onSetWeatherLocationQuery={handleSetWeatherCity}
-        onSetWeatherUnits={setWeatherUnits}
-        onUseWeatherGeolocation={handleUseWeatherGeolocation}
-        onGoogleSignIn={() => void handleGoogleSignIn()}
-        onGoogleSync={() => void syncGoogleCalendarData()}
-        onGoogleLogout={handleGoogleLogout}
-        onImportEvents={handleImportEvents}
-        onOpenDownloadHub={() => {
-          setSettingsOpen(false);
-          setDownloadHubOpen(true);
-        }}
-        showToast={showToast}
-      />
-
       {/* Dedicated Astronomy & Celestial Almanac Modal */}
       <AstronomyModal
         open={astronomyOpen}
@@ -1998,17 +2061,6 @@ export default function App() {
         }}
       />
 
-      {/* Device-Aware Desktop & Mobile Apps + Widgets Hub */}
-      <AppDownloadHub
-        open={downloadHubOpen}
-        onClose={() => setDownloadHubOpen(false)}
-        onLaunchWidget={(mode) => {
-          setDownloadHubOpen(false);
-          navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile');
-        }}
-        showToast={showToast}
-      />
-
       {/* Local-First Device Account + Real Google Authentication Modal */}
       <AuthModal
         open={authModalOpen}
@@ -2021,57 +2073,40 @@ export default function App() {
         showToast={showToast}
       />
 
-      {/* Legal & Compliance Modal */}
-      <LegalModal
-        open={legalModalOpen}
-        onClose={() => setLegalModalOpen(false)}
-        initialDoc={legalInitialDoc}
-      />
-
       {/* Footer Copyright Banner & Legal Navigation */}
       <footer className="h-[26px] px-3 bg-[#FAFAFA] dark:bg-[#111114] border-t border-[#EFEFEF] dark:border-[#242429] flex items-center justify-between text-[11px] text-[#8C8C8C] dark:text-[#71717A] shrink-0 select-none transition-colors">
         <div className="flex items-center gap-2">
-          <span>© 2026 calendar.q</span>
+          <span>© 2026 Calander.Q</span>
           <span className="hidden md:inline text-[#D4D4D4] dark:text-[#3F3F46]">·</span>
-          <span className="hidden md:inline text-[#A0A0A0] dark:text-[#71717A]">Local-first Universal Calendar</span>
+          <span className="hidden md:inline text-[#A0A0A0] dark:text-[#71717A]">
+            {pwaIsInstalled ? 'Downloaded App · Offline & Local Ready' : 'Universal Calendar'}
+          </span>
         </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              setLegalInitialDoc('privacy');
-              setLegalModalOpen(true);
-            }}
+            onClick={() => navigateSurface('legal', 'privacy')}
             className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Privacy
           </button>
           <button
             type="button"
-            onClick={() => {
-              setLegalInitialDoc('terms');
-              setLegalModalOpen(true);
-            }}
+            onClick={() => navigateSurface('legal', 'terms')}
             className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Terms
           </button>
           <button
             type="button"
-            onClick={() => {
-              setLegalInitialDoc('data-deletion');
-              setLegalModalOpen(true);
-            }}
+            onClick={() => navigateSurface('legal', 'data-deletion')}
             className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Data Deletion
           </button>
           <button
             type="button"
-            onClick={() => {
-              setLegalInitialDoc('licenses');
-              setLegalModalOpen(true);
-            }}
+            onClick={() => navigateSurface('legal', 'licenses')}
             className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
           >
             Licenses
