@@ -37,18 +37,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({
             calendars, holidays, weather, and astronomy in one quiet workspace.
           </p>
 
-          {/* Clean Info Row */}
-          <div className="flex flex-wrap items-center gap-4 text-[13px] text-[#858585]">
-            <button
-              type="button"
-              onClick={() => onOpenAbout?.()}
-              className="hover:text-white transition-colors cursor-pointer"
-            >
-              About
-            </button>
-          </div>
-
-          <div className="pt-1 flex flex-wrap items-center gap-2 text-[12.5px] text-[#858585]">
+          <div className="pt-1 flex items-center gap-2 text-[12.5px] text-[#858585] whitespace-nowrap">
             <span>© 2026</span>
             <span className="text-white font-medium">Calander.Q</span>
             <span>· Universal Calendar Platform</span>
