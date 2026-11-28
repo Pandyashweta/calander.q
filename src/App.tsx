@@ -781,7 +781,19 @@ export default function App() {
     const unsub = initAuth(
       (user, token) => {
         setGoogleUser(user);
-        void syncGoogleCalendarData(token, undefined, false);
+        if (user.email) {
+          void oauthApi(
+            user.email,
+            user.displayName || user.email.split('@')[0],
+            'google',
+            user.photoURL || undefined
+          )
+            .then((localAuth) => setCurrentUser(localAuth.user))
+            .catch(() => {});
+        }
+        if (token) {
+          void syncGoogleCalendarData(token, undefined, false);
+        }
       },
       () => {
         setGoogleUser(null);
@@ -820,8 +832,15 @@ export default function App() {
           setCurrentUser(localAuth.user);
         }
         applyCleanSignedInWorkspace();
-        await syncGoogleCalendarData(res.accessToken, undefined, true);
+        if (res.accessToken) {
+          try {
+            await syncGoogleCalendarData(res.accessToken, undefined, true);
+          } catch {
+            // Sign-in still succeeds even if Calendar API sync needs retry
+          }
+        }
         setAuthModalOpen(false);
+        setGoogleSyncing(false);
         showToast(`Signed in as ${res.user.email || 'Google account'}`);
       } else {
         setGoogleSyncing(false);
@@ -831,6 +850,7 @@ export default function App() {
         err instanceof Error ? err.message : 'Google sign-in was cancelled or failed.';
       setGoogleError(msg);
       setGoogleSyncing(false);
+      showToast(msg);
       throw err;
     }
   }, [applyCleanSignedInWorkspace, syncGoogleCalendarData, showToast]);
@@ -1565,7 +1585,9 @@ export default function App() {
           onSetWeatherLocationQuery={handleSetWeatherCity}
           onSetWeatherUnits={setWeatherUnits}
           onUseWeatherGeolocation={handleUseWeatherGeolocation}
-          onGoogleSignIn={() => void handleGoogleSignIn()}
+          onGoogleSignIn={() => {
+            void handleGoogleSignIn().catch(() => {});
+          }}
           onGoogleSync={() => void syncGoogleCalendarData()}
           onGoogleLogout={handleGoogleLogout}
           onImportEvents={handleImportEvents}
@@ -1678,7 +1700,9 @@ export default function App() {
             onToggleAllCultural={handleToggleAllCultural}
             onToggleGujaratiScript={() => setGujaratiScript((v) => !v)}
             onCollapseSidebar={() => setLeftOpen(false)}
-            onGoogleSignIn={() => void handleGoogleSignIn()}
+            onGoogleSignIn={() => {
+            void handleGoogleSignIn().catch(() => {});
+          }}
             onGoogleSync={() => void syncGoogleCalendarData()}
             onGoogleLogout={handleGoogleLogout}
             onOpenSettings={(tab) => {

@@ -1,9 +1,11 @@
 import { initializeApp, getApps } from 'firebase/app';
 import {
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   User,
 } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -47,13 +49,28 @@ export const initAuth = (
   onAuthSuccess?: (user: GoogleUserProfile, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Handle completed redirect sign-in (used in mobile/PWA/popup-blocked deployments)
+  void getRedirectResult(auth)
+    .then((result) => {
+      if (result?.user) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        const accessToken = credential?.accessToken || '';
+        if (accessToken) {
+          cachedAccessToken = accessToken;
+        }
+        onAuthSuccess?.(toUserProfile(result.user), accessToken);
+      }
+    })
+    .catch(() => {
+      // Ignore if no redirect result is pending
+    });
+
   return onAuthStateChanged(auth, (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
         onAuthSuccess?.(toUserProfile(user), cachedAccessToken);
       } else if (!isSigningIn) {
-        cachedAccessToken = null;
-        onAuthFailure?.();
+        onAuthSuccess?.(toUserProfile(user), '');
       }
     } else {
       cachedAccessToken = null;
@@ -80,14 +97,22 @@ export const googleSignIn = async (): Promise<{
     };
   } catch (err: any) {
     const code = err?.code || '';
+    if (
+      code === 'auth/popup-blocked' ||
+      code === 'auth/operation-not-supported-in-this-environment'
+    ) {
+      // Seamless redirect fallback for deployed PWAs, mobile browsers, or strict popup blockers
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
       throw new Error('Google sign-in popup was closed before completing.');
     }
-    if (code === 'auth/popup-blocked') {
-      throw new Error('Browser blocked the Google sign-in popup. Please allow popups for this site and try again.');
-    }
     if (code === 'auth/unauthorized-domain') {
-      throw new Error('This preview domain is not authorized in Firebase Auth. Use a local device account or open in the deployed origin.');
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      throw new Error(
+        `Domain "${host}" is not authorized in Firebase Auth. Add it under Firebase Console → Authentication → Settings → Authorized domains.`
+      );
     }
     throw new Error(err?.message || 'Google sign-in failed. Please try again.');
   } finally {
