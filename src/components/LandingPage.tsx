@@ -4,12 +4,11 @@ import {
   Download,
   ExternalLink,
   Menu,
-  Pin,
   X,
 } from 'lucide-react';
 import { UserAccount } from '../types/calendar';
 import { WORLD_CALENDAR_SYSTEMS } from '../data/worldCalendars';
-import { HolidayRegionCode, detectDeviceInfo, launchFloatingDesktopWidget } from '../utils/deviceUtils';
+import { HolidayRegionCode, detectDeviceInfo } from '../utils/deviceUtils';
 import { LegalDocId } from './LegalModal';
 import { LandingFooter } from './LandingFooter';
 
@@ -21,7 +20,6 @@ interface LandingPageProps {
   onOpenAuth: (tab?: 'signin' | 'signup') => void;
   onOpenDownloadHub: () => void;
   onOpenAbout: () => void;
-  onLaunchWidget: (mode: 'desktop' | 'mobile') => void;
   onOpenLegal: (doc: LegalDocId) => void;
   showToast?: (msg: string) => void;
 }
@@ -36,9 +34,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenCalendar,
   onOpenDownloadHub,
   onOpenAbout,
-  onLaunchWidget,
   onOpenLegal,
-  showToast,
 }) => {
   const device = useMemo(() => detectDeviceInfo(), []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -56,23 +52,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   const heroSubtitleWords = useMemo(
     () =>
-      `The universal calendar that gets every date right. No clutter. No guesswork. Just ${WORLD_CALENDAR_SYSTEMS.length} world calendars, holidays, and time—every day.`.split(
+      `The universal calendar that gets every date right. No clutter. No guesswork. Just ${WORLD_CALENDAR_SYSTEMS.length} world calendars, holidays, and time - every day.`.split(
         ' '
       ),
     []
   );
-
-  const handlePinDesktopWidget = async () => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const res = await launchFloatingDesktopWidget(origin);
-    if (res === 'pip') {
-      showToast?.('Floating desktop widget pinned on your screen.');
-    } else if (res === 'popup') {
-      showToast?.('Opened standalone desktop widget window.');
-    } else {
-      onLaunchWidget('desktop');
-    }
-  };
 
   return (
     <MotionConfig reducedMotion="user">
@@ -184,38 +168,42 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Word-by-word blur + translateY reveal matching exact.framer.ai */}
             <h1 className="text-[38px] sm:text-[56px] font-medium tracking-[-0.03em] leading-[1.06] text-white">
               {HERO_WORDS.map((word, idx) => (
-                <motion.span
-                  key={word}
-                  initial={{ opacity: 0.001, y: 14, filter: 'blur(4px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  transition={{
-                    duration: 0.55,
-                    delay: idx * 0.07,
-                    ease: EASE_OUT_EXPO,
-                  }}
-                  className="inline-block mr-[0.26em] last:mr-0"
-                >
-                  {word}
-                </motion.span>
+                <React.Fragment key={word}>
+                  <motion.span
+                    initial={{ opacity: 0.001, y: 14, filter: 'blur(4px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    transition={{
+                      duration: 0.55,
+                      delay: idx * 0.07,
+                      ease: EASE_OUT_EXPO,
+                    }}
+                    className="inline-block"
+                  >
+                    {word}
+                  </motion.span>
+                  {idx < HERO_WORDS.length - 1 ? ' ' : null}
+                </React.Fragment>
               ))}
             </h1>
 
             {/* Subtitle blur + stagger reveal */}
             <p className="mt-4 text-[15px] sm:text-[16px] text-[#858585] max-w-[500px] mx-auto leading-[1.45]">
               {heroSubtitleWords.map((word, idx) => (
-                <motion.span
-                  key={`${word}-${idx}`}
-                  initial={{ opacity: 0.001, y: 8, filter: 'blur(8px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  transition={{
-                    duration: 0.45,
-                    delay: 0.22 + idx * 0.018,
-                    ease: EASE_OUT_EXPO,
-                  }}
-                  className="inline-block mr-[0.26em] last:mr-0"
-                >
-                  {word}
-                </motion.span>
+                <React.Fragment key={`${word}-${idx}`}>
+                  <motion.span
+                    initial={{ opacity: 0.001, y: 8, filter: 'blur(8px)' }}
+                    animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                    transition={{
+                      duration: 0.45,
+                      delay: 0.22 + idx * 0.018,
+                      ease: EASE_OUT_EXPO,
+                    }}
+                    className="inline-block"
+                  >
+                    {word}
+                  </motion.span>
+                  {idx < heroSubtitleWords.length - 1 ? ' ' : null}
+                </React.Fragment>
               ))}
             </p>
 
@@ -439,57 +427,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.55, ease: EASE_OUT_EXPO }}
           >
-            <div className="text-[14px] font-mono text-[#858585]">// Three ways to run</div>
+            <div className="text-[14px] font-mono text-[#858585]">// Two ways to run</div>
             <h2 className="mt-3 text-[32px] sm:text-[40px] font-medium tracking-[-0.025em] leading-[1.15]">
               <span className="text-white block">Start planning your way.</span>
               <span className="text-[#858585] block">Choose what works best.</span>
             </h2>
           </motion.div>
 
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* 1. Desktop & Mobile Widgets */}
-            <motion.div
-              initial={{ opacity: 0, y: 28 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.5, delay: 0, ease: EASE_OUT_EXPO }}
-              className="space-y-4"
-            >
-              <div className="relative rounded-none overflow-hidden aspect-[4/3] bg-[#171615] p-3 flex items-center justify-center group">
-                <img
-                  src={LANDSCAPE_BACKDROP}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-                />
-                <div className="relative z-10 w-full h-full rounded-none overflow-hidden border border-white/[0.16] bg-[#0F0F0F] shadow-xl">
-                  <img
-                    src="/screenshots/widget-desktop-dark.png"
-                    alt="Desktop widget preview"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <h3 className="text-[20px] font-medium text-white">Desktop &amp; mobile widget</h3>
-                <p className="text-[14px] text-[#858585] leading-[1.45]">
-                  Pin an always-on-top widget on your desktop or add it to your iPhone &amp; Android
-                  home screen.
-                </p>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => void handlePinDesktopWidget()}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="h-[38px] px-4 rounded-[8px] bg-[#0F0F0F] hover:bg-[#171615] border border-white/[0.18] text-white text-[13.5px] font-medium inline-flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <Pin className="w-3.5 h-3.5" />
-                <span>Pin desktop widget</span>
-              </motion.button>
-            </motion.div>
-
-            {/* 2. Standalone App */}
+          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* 1. Standalone App */}
             <motion.div
               initial={{ opacity: 0, y: 28 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -572,55 +518,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </motion.button>
             </motion.div>
           </div>
-        </section>
-
-        {/* ==================== 7. BOTTOM CTA BANNER ==================== */}
-        <section className="max-w-[1080px] mx-auto px-5 sm:px-6 pb-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-            className="rounded-[12px] bg-[#0F0F0F] border border-white/[0.14] p-6 sm:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center overflow-hidden"
-          >
-            <div className="lg:col-span-6 space-y-4">
-              <h2 className="text-[28px] sm:text-[36px] font-medium tracking-[-0.025em] leading-[1.12] text-white">
-                Start planning with precision today
-              </h2>
-              <p className="text-[15px] text-[#858585] leading-[1.45]">
-                Free forever. Install in seconds. Start organizing immediately.
-              </p>
-              <div className="pt-2">
-                <motion.button
-                  type="button"
-                  onClick={onOpenDownloadHub}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="h-[40px] px-5 rounded-[8px] bg-white hover:bg-[#E4E4E7] text-[#0A0908] text-[14px] font-medium transition-colors cursor-pointer"
-                >
-                  {device.appDownloadLabel}
-                </motion.button>
-              </div>
-            </div>
-
-            <div className="lg:col-span-6">
-              <div className="relative rounded-none overflow-hidden aspect-[16/10] bg-[#171615] p-3 sm:p-4 flex items-center justify-center group">
-                <img
-                  src={LANDSCAPE_BACKDROP}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                />
-                <div className="relative z-10 w-full h-full rounded-none overflow-hidden border border-white/[0.16] bg-[#0F0F0F] shadow-2xl">
-                  <img
-                    src="/screenshots/workspace-month-dark.png"
-                    alt="Calander.Q dark mode calendar preview"
-                    className="w-full h-full object-cover object-top"
-                  />
-                </div>
-              </div>
-            </div>
-          </motion.div>
         </section>
 
         {/* ==================== 8. FOOTER ==================== */}

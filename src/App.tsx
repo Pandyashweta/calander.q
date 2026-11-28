@@ -71,7 +71,6 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { AstronomyModal } from './components/AstronomyModal';
 import { AppDownloadHub } from './components/AppDownloadHub';
 import { LandingPage } from './components/LandingPage';
-import { WidgetView } from './components/WidgetView';
 import { OfflineSyncIndicator } from './components/OfflineSyncIndicator';
 import { useViewport } from './hooks/useViewport';
 import { useOnlineStatus, usePWAInstall } from './hooks/usePWAInstall';
@@ -104,7 +103,37 @@ const STORAGE_LAYERS_KEY = 'calendar_q_layers_v3';
 const STORAGE_PREFS_KEY = 'calendar_q_prefs_v3';
 const STORAGE_THEME_KEY = 'calendar_q_theme_v1';
 
-type AppSurface = 'landing' | 'about' | 'download' | 'legal' | 'settings' | 'calendar' | 'widget-desktop' | 'widget-mobile';
+type AppSurface = 'landing' | 'about' | 'download' | 'legal' | 'settings' | 'calendar';
+
+const SURFACE_TITLES: Record<AppSurface, string> = {
+  landing: 'Calander.Q — Universal Calendar, Holidays & Time',
+  about: 'About — Calander.Q',
+  download: 'Download App — Calander.Q',
+  legal: 'Legal & Privacy — Calander.Q',
+  settings: 'Settings — Calander.Q',
+  calendar: 'Calander - CalanderQ',
+};
+
+const LEGAL_DOC_TITLES: Record<LegalDocId, string> = {
+  privacy: 'Privacy Policy — Calander.Q',
+  terms: 'Terms of Service — Calander.Q',
+  cookies: 'Cookie Policy — Calander.Q',
+  'data-deletion': 'Data Deletion Policy — Calander.Q',
+  'account-deletion': 'Account Deletion — Calander.Q',
+  contact: 'Contact & Support — Calander.Q',
+  copyright: 'Copyright & IP Notice — Calander.Q',
+  licenses: 'Open-Source Licenses — Calander.Q',
+};
+
+const SETTINGS_TAB_TITLES: Record<SettingsTab, string> = {
+  festivals: 'Holidays & Local — Settings — Calander.Q',
+  world: 'World Calendars — Settings — Calander.Q',
+  display: 'Display & Weather — Settings — Calander.Q',
+  sync: 'Calendar Sync (.ics) — Settings — Calander.Q',
+  shortcuts: 'Keyboard Shortcuts — Settings — Calander.Q',
+  google: 'Google Calendar — Settings — Calander.Q',
+  apps: 'Apps — Settings — Calander.Q',
+};
 
 const VIEW_LABELS: Record<ViewMode, string> = {
   day: 'Day',
@@ -117,13 +146,11 @@ const VIEW_LABELS: Record<ViewMode, string> = {
 function getInitialSurface(): AppSurface {
   if (typeof window === 'undefined') return 'landing';
   const params = new URLSearchParams(window.location.search);
-  const widget = params.get('widget');
-  if (widget === 'desktop') return 'widget-desktop';
-  if (widget === 'mobile') return 'widget-mobile';
-  if (params.get('page') === 'about') return 'about';
-  if (params.get('page') === 'legal') return 'legal';
-  if (params.get('page') === 'settings') return 'settings';
-  if (params.get('page') === 'download' || params.get('install') === '1') return 'download';
+  const page = params.get('page');
+  if (page === 'about') return 'about';
+  if (page === 'settings') return 'settings';
+  if (page === 'legal') return 'legal';
+  if (page === 'download' || params.get('install') === '1') return 'download';
   if (params.get('open') === 'calendar') return 'calendar';
   return 'landing';
 }
@@ -203,15 +230,12 @@ export default function App() {
       if (typeof window === 'undefined') return;
       try {
         const url = new URL(window.location.href);
-        url.searchParams.delete('widget');
         url.searchParams.delete('open');
         url.searchParams.delete('page');
         url.searchParams.delete('install');
         url.searchParams.delete('doc');
         url.searchParams.delete('tab');
-        if (next === 'widget-desktop') url.searchParams.set('widget', 'desktop');
-        else if (next === 'widget-mobile') url.searchParams.set('widget', 'mobile');
-        else if (next === 'about') url.searchParams.set('page', 'about');
+        if (next === 'about') url.searchParams.set('page', 'about');
         else if (next === 'download') url.searchParams.set('page', 'download');
         else if (next === 'settings') {
           url.searchParams.set('page', 'settings');
@@ -229,20 +253,23 @@ export default function App() {
   );
 
   // Automatic midnight detection & daylight saving update
+  const todayRef = useRef(today);
+  todayRef.current = today;
+
   useEffect(() => {
     const checkMidnight = () => {
       const now = new Date();
       const cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      setToday((prev) => {
-        if (prev.getTime() !== cur.getTime()) {
-          setAnchorDate((prevAnchor) => (isSameDay(prevAnchor, prev) ? cur : prevAnchor));
-          return cur;
-        }
-        return prev;
-      });
+      const prev = todayRef.current;
+      if (prev.getTime() !== cur.getTime()) {
+        todayRef.current = cur;
+        setToday(cur);
+        setAnchorDate((prevAnchor) => (isSameDay(prevAnchor, prev) ? cur : prevAnchor));
+      }
     };
 
-    const timer = setInterval(checkMidnight, 10000);
+    checkMidnight();
+    const timer = setInterval(checkMidnight, 5000);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') checkMidnight();
     };
@@ -402,7 +429,7 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(() => {
     if (typeof window === 'undefined') return 'festivals';
     const t = new URLSearchParams(window.location.search).get('tab') as SettingsTab | null;
-    const valid: SettingsTab[] = ['festivals', 'world', 'display', 'sync', 'shortcuts', 'google', 'language', 'apps'];
+    const valid: SettingsTab[] = ['festivals', 'world', 'display', 'sync', 'shortcuts', 'google', 'apps'];
     return t && valid.includes(t) ? t : 'festivals';
   });
   const [astronomyOpen, setAstronomyOpen] = useState(false);
@@ -416,6 +443,16 @@ export default function App() {
     const d = new URLSearchParams(window.location.search).get('doc') as LegalDocId | null;
     return d || 'privacy';
   });
+
+  useEffect(() => {
+    if (appSurface === 'legal') {
+      document.title = LEGAL_DOC_TITLES[legalInitialDoc] || SURFACE_TITLES.legal;
+    } else if (appSurface === 'settings') {
+      document.title = SETTINGS_TAB_TITLES[settingsTab] || SURFACE_TITLES.settings;
+    } else {
+      document.title = SURFACE_TITLES[appSurface] || 'Calander.Q';
+    }
+  }, [appSurface, legalInitialDoc, settingsTab]);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => getStoredUser());
 
   useEffect(() => {
@@ -863,10 +900,7 @@ export default function App() {
             lastDay.getMonth()
           ].slice(0, 3)}`;
 
-    const yearSuffix =
-      firstDay.getFullYear() !== today.getFullYear()
-        ? ` ${firstDay.getFullYear()}`
-        : '';
+    const yearSuffix = ` ${firstDay.getFullYear()}`;
 
     let subCaption = '';
     if (headerSubCalendar === 'gujarati-vikram') {
@@ -948,8 +982,12 @@ export default function App() {
   }, [effectiveViewMode]);
 
   const handleToday = useCallback(() => {
-    setAnchorDate(today);
-  }, [today]);
+    const now = new Date();
+    const cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    todayRef.current = cur;
+    setToday(cur);
+    setAnchorDate(cur);
+  }, []);
 
   const handleToggleLayer = useCallback((layerId: string) => {
     setLayers((prev) =>
@@ -1399,29 +1437,6 @@ export default function App() {
     [currentUser]
   );
 
-  // ========= SURFACE 1: LIVE DESKTOP OR MOBILE WIDGET =========
-  if (appSurface === 'widget-desktop' || appSurface === 'widget-mobile') {
-    return (
-      <>
-        <WidgetView
-          mode={appSurface === 'widget-desktop' ? 'desktop' : 'mobile'}
-          events={allEvents}
-          weather={weatherData}
-          holidayRegion={holidayRegion}
-          onOpenCalendar={() => navigateSurface('calendar')}
-          onSwitchMode={(nextMode) =>
-            navigateSurface(nextMode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
-          }
-        />
-        {toastMsg && (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-3.5 py-2 rounded-lg bg-[#1A1A1A] text-white text-[12px] font-medium shadow-lg pointer-events-none">
-            {toastMsg}
-          </div>
-        )}
-      </>
-    );
-  }
-
   // ========= SURFACE 2: DEDICATED ABOUT PAGE =========
   if (appSurface === 'about') {
     return (
@@ -1463,16 +1478,13 @@ export default function App() {
     );
   }
 
-  // ========= SURFACE 4: DEDICATED DOWNLOAD & WIDGETS PAGE =========
+  // ========= SURFACE 4: DEDICATED DOWNLOAD PAGE =========
   if (appSurface === 'download') {
     return (
       <>
         <AppDownloadHub
           onBack={() => navigateSurface('landing')}
           onOpenCalendar={() => navigateSurface('calendar')}
-          onLaunchWidget={(mode) =>
-            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
-          }
           onOpenLegal={(doc) => navigateSurface('legal', doc)}
           onOpenAbout={() => navigateSurface('about')}
           showToast={showToast}
@@ -1582,9 +1594,6 @@ export default function App() {
           onOpenAuth={(tab) => handleOpenAuth(tab)}
           onOpenDownloadHub={() => navigateSurface('download')}
           onOpenAbout={() => navigateSurface('about')}
-          onLaunchWidget={(mode) =>
-            navigateSurface(mode === 'desktop' ? 'widget-desktop' : 'widget-mobile')
-          }
           onOpenLegal={(doc) => navigateSurface('legal', doc)}
           showToast={showToast}
         />
@@ -1760,7 +1769,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Right: Offline/Local Sync Indicator, Astronomy, Apps & Widgets, View Switcher, Side Panel */}
+            {/* Right: Offline/Local Sync Indicator, Astronomy, Apps, View Switcher, Side Panel */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <OfflineSyncIndicator
                 isOnline={isOnline}
@@ -1785,13 +1794,13 @@ export default function App() {
                 <span className="hidden md:inline">Astronomy</span>
               </button>
 
-              {/* Device-Aware Desktop & Mobile App / Widget Hub */}
+              {/* Device-Aware Desktop & Mobile App Hub */}
               {!pwaIsInstalled && (
                 <button
                   type="button"
                   onClick={() => navigateSurface('download')}
-                  title="Install Desktop / Mobile App & Widgets"
-                  aria-label="Install App and Widgets"
+                  title="Install Desktop / Mobile App"
+                  aria-label="Install App"
                   className={`h-[30px] px-2 sm:px-2.5 rounded-[6px] border text-[12px] font-medium inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer shadow-2xs ${
                     pwaCanInstall
                       ? 'border-[#1A1A1A] dark:border-[#F4F4F5] bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B]'
@@ -2073,7 +2082,7 @@ export default function App() {
         showToast={showToast}
       />
 
-      {/* Footer Copyright Banner & Legal Navigation */}
+      {/* Footer Copyright Banner */}
       <footer className="h-[26px] px-3 bg-[#FAFAFA] dark:bg-[#111114] border-t border-[#EFEFEF] dark:border-[#242429] flex items-center justify-between text-[11px] text-[#8C8C8C] dark:text-[#71717A] shrink-0 select-none transition-colors">
         <div className="flex items-center gap-2">
           <span>© 2026 Calander.Q</span>
@@ -2081,36 +2090,6 @@ export default function App() {
           <span className="hidden md:inline text-[#A0A0A0] dark:text-[#71717A]">
             {pwaIsInstalled ? 'Downloaded App · Offline & Local Ready' : 'Universal Calendar'}
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigateSurface('legal', 'privacy')}
-            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
-          >
-            Privacy
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateSurface('legal', 'terms')}
-            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
-          >
-            Terms
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateSurface('legal', 'data-deletion')}
-            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
-          >
-            Data Deletion
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateSurface('legal', 'licenses')}
-            className="hover:text-[#1A1A1A] dark:hover:text-[#F4F4F5] hover:underline cursor-pointer"
-          >
-            Licenses
-          </button>
         </div>
       </footer>
 

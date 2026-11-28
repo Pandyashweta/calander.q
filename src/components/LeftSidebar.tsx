@@ -180,15 +180,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     [layers]
   );
 
-  // Gujarati Calendar & Tithis, World Calendar Festivals, and International Days live under World Calendars
-  const worldOverlayLayers = useMemo(
+  // Global World Calendar Festivals & International Days live under Festivals & Tithis;
+  // Gujarati Calendar & Tithis is grouped under Indian Calendars.
+  const globalOverlayLayers = useMemo(
     () =>
       layers.filter(
-        (l) =>
-          l.id === 'gujarati-calendar' ||
-          l.id === 'world-observances' ||
-          l.id === 'global-days'
+        (l) => l.id === 'world-observances' || l.id === 'global-days'
       ),
+    [layers]
+  );
+  const gujaratiOverlayLayer = useMemo(
+    () => layers.find((l) => l.id === 'gujarati-calendar') || null,
     [layers]
   );
 
@@ -202,8 +204,17 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
     [layers]
   );
 
-  const activeWorldOverlayCount = worldOverlayLayers.filter((l) => l.visible).length;
+  const activeWorldOverlayCount =
+    globalOverlayLayers.filter((l) => l.visible).length +
+    (gujaratiOverlayLayer?.visible ? 1 : 0);
   const totalActiveWorld = enabledWorldCount + activeWorldOverlayCount;
+
+  const orderedWorldGroups = useMemo(() => {
+    if (holidayRegion === 'IN') return WORLD_CALENDAR_GROUPS;
+    const nonIndian = WORLD_CALENDAR_GROUPS.filter((g) => g.id !== 'indian');
+    const indian = WORLD_CALENDAR_GROUPS.filter((g) => g.id === 'indian');
+    return [...nonIndian, ...indian];
+  }, [holidayRegion]);
 
   const handleMiniPrev = () => {
     setMiniMonthOffset((prev) => {
@@ -658,14 +669,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                 />
               </div>
 
-              {/* World Calendar Event & Tithi Overlays */}
+              {/* Global World Calendar Event Overlays */}
               {(!cleanSearch ||
-                worldOverlayLayers.some((l) => l.name.toLowerCase().includes(cleanSearch))) && (
+                globalOverlayLayers.some((l) => l.name.toLowerCase().includes(cleanSearch))) && (
                 <div className="space-y-0.5 pb-2 border-b border-[#EFEFEF] dark:border-[#242429]">
                   <div className="text-[10px] font-semibold text-[#9A9A9A] dark:text-[#71717A] uppercase tracking-wider px-1 mb-1">
-                    Festivals &amp; Tithis
+                    Festivals &amp; Observances
                   </div>
-                  {worldOverlayLayers
+                  {globalOverlayLayers
                     .filter((l) => !cleanSearch || l.name.toLowerCase().includes(cleanSearch))
                     .map((layer) => {
                       const theme = COLOR_THEMES[layer.color] || COLOR_THEMES.teal;
@@ -702,24 +713,6 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                               {layer.name}
                             </span>
                           </button>
-
-                          {layer.id === 'gujarati-calendar' && layer.visible && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleGujaratiScript();
-                              }}
-                              title="Switch Gujarati labels between English & ગુજરાતી"
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium border cursor-pointer shrink-0 ${
-                                gujaratiScript
-                                  ? 'bg-[#FEF5D9] dark:bg-amber-950/60 border-[#E5C16C] dark:border-amber-700/60 text-[#7A4C00] dark:text-amber-300 font-gujarati'
-                                  : 'bg-white dark:bg-[#1C1C22] border-[#E2E2E2] dark:border-[#2E2E36] text-[#666666] dark:text-[#A1A1AA]'
-                              }`}
-                            >
-                              {gujaratiScript ? 'ગુજ' : 'En'}
-                            </button>
-                          )}
                         </div>
                       );
                     })}
@@ -728,7 +721,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
               {/* Organized Collapsible World Calendar Category Sub-Groups */}
               <div className="space-y-1">
-                {WORLD_CALENDAR_GROUPS.map((grp) => {
+                {orderedWorldGroups.map((grp) => {
                   const groupSystems = WORLD_CALENDAR_SYSTEMS.filter(
                     (s) =>
                       s.group === grp.id &&
@@ -736,11 +729,19 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         s.name.toLowerCase().includes(cleanSearch) ||
                         s.region.toLowerCase().includes(cleanSearch))
                   );
-                  if (groupSystems.length === 0) return null;
+                  const showGujaratiOverlayInIndian =
+                    grp.id === 'indian' &&
+                    gujaratiOverlayLayer &&
+                    (!cleanSearch ||
+                      gujaratiOverlayLayer.name.toLowerCase().includes(cleanSearch));
 
-                  const activeInGroup = groupSystems.filter((s) =>
-                    enabledWorldSet.has(s.id)
-                  ).length;
+                  if (groupSystems.length === 0 && !showGujaratiOverlayInIndian) return null;
+
+                  const activeInGroup =
+                    groupSystems.filter((s) => enabledWorldSet.has(s.id)).length +
+                    (grp.id === 'indian' && gujaratiOverlayLayer?.visible ? 1 : 0);
+                  const totalInGroup =
+                    groupSystems.length + (grp.id === 'indian' && gujaratiOverlayLayer ? 1 : 0);
                   const isOpen = cleanSearch.length > 0 || expandedWorldCategories[grp.id];
                   const dotColor = WORLD_CATEGORY_COLORS[grp.id] || '#737373';
 
@@ -763,13 +764,65 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
                         </span>
                         <span className="text-[10px] text-[#9A9A9A] dark:text-[#71717A] tabular-nums shrink-0">
                           {activeInGroup > 0
-                            ? `${activeInGroup}/${groupSystems.length}`
-                            : groupSystems.length}
+                            ? `${activeInGroup}/${totalInGroup}`
+                            : totalInGroup}
                         </span>
                       </button>
 
                       {isOpen && (
                         <div className="pl-3 mt-0.5 space-y-0.5 border-l border-[#ECECEC] dark:border-[#242429] ml-1.5">
+                          {showGujaratiOverlayInIndian && gujaratiOverlayLayer && (() => {
+                            const theme = COLOR_THEMES[gujaratiOverlayLayer.color] || COLOR_THEMES.marigold;
+                            return (
+                              <div className="flex items-center justify-between gap-1.5 py-[3.5px] px-1 rounded hover:bg-[#F0F0F0] dark:hover:bg-[#1C1C22]">
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleLayer(gujaratiOverlayLayer.id)}
+                                  className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer"
+                                >
+                                  <span
+                                    className="w-[10px] h-[10px] rounded-[2px] flex items-center justify-center shrink-0"
+                                    style={{
+                                      backgroundColor: gujaratiOverlayLayer.visible
+                                        ? theme.dot
+                                        : 'transparent',
+                                      border: `1.5px solid ${theme.dot}`,
+                                    }}
+                                  >
+                                    {gujaratiOverlayLayer.visible && (
+                                      <Check className="w-2 h-2 text-white" strokeWidth={3} />
+                                    )}
+                                  </span>
+                                  <span
+                                    className={`text-[11.5px] truncate ${
+                                      gujaratiOverlayLayer.visible
+                                        ? 'text-[#1F1F1F] dark:text-[#F4F4F5] font-medium'
+                                        : 'text-[#666666] dark:text-[#A1A1AA]'
+                                    }`}
+                                  >
+                                    {gujaratiOverlayLayer.name}
+                                  </span>
+                                </button>
+                                {gujaratiOverlayLayer.visible && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onToggleGujaratiScript();
+                                    }}
+                                    title="Switch Gujarati labels between English & ગુજરાતી"
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border cursor-pointer shrink-0 ${
+                                      gujaratiScript
+                                        ? 'bg-[#FEF5D9] dark:bg-amber-950/60 border-[#E5C16C] dark:border-amber-700/60 text-[#7A4C00] dark:text-amber-300 font-gujarati'
+                                        : 'bg-white dark:bg-[#1C1C22] border-[#E2E2E2] dark:border-[#2E2E36] text-[#666666] dark:text-[#A1A1AA]'
+                                    }`}
+                                  >
+                                    {gujaratiScript ? 'ગુજ' : 'En'}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                           {groupSystems.map((sys) => {
                             const isEnabled = enabledWorldSet.has(sys.id);
                             return (
@@ -954,7 +1007,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             className="w-full py-1.5 px-2.5 rounded-md hover:bg-[#EFEFEF] dark:hover:bg-[#1C1C22] text-[11.5px] font-medium text-[#666666] dark:text-[#A1A1AA] hover:text-[#1A1A1A] dark:hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">Desktop &amp; Mobile Widgets</span>
+            <span className="truncate">Download App</span>
           </button>
         )}
       </div>

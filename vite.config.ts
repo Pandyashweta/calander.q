@@ -19,8 +19,6 @@ export default defineConfig(() => {
           'apple-touch-icon.png',
           'android-chrome-192x192.png',
           'android-chrome-512x512.png',
-          'widgets/calendar-template.json',
-          'sw-widgets.js',
         ],
         manifest: {
           id: '/',
@@ -73,13 +71,6 @@ export default defineConfig(() => {
               form_factor: 'wide',
               label: 'Full-month calendar workspace with regional holidays',
             },
-            {
-              src: '/screenshots/widget-mobile.png',
-              sizes: '860x1640',
-              type: 'image/png',
-              form_factor: 'narrow',
-              label: 'Mobile calendar and home screen widget',
-            },
           ],
           shortcuts: [
             {
@@ -95,69 +86,9 @@ export default defineConfig(() => {
                 },
               ],
             },
-            {
-              name: 'Desktop Widget',
-              short_name: 'Desktop Widget',
-              description: 'Open the glanceable desktop calendar widget',
-              url: '/?widget=desktop&embed=1',
-              icons: [
-                {
-                  src: '/android-chrome-192x192.png',
-                  sizes: '192x192',
-                  type: 'image/png',
-                },
-              ],
-            },
-            {
-              name: 'Mobile Widget',
-              short_name: 'Mobile Widget',
-              description: 'Open the glanceable mobile calendar widget',
-              url: '/?widget=mobile&embed=1',
-              icons: [
-                {
-                  src: '/android-chrome-192x192.png',
-                  sizes: '192x192',
-                  type: 'image/png',
-                },
-              ],
-            },
-          ],
-          // W3C / Windows 11 Native PWA Widgets Board declaration
-          widgets: [
-            {
-              name: 'Calander.Q Today & Month',
-              short_name: 'Calander.Q',
-              tag: 'calendar-q-today',
-              description: 'Glanceable today card, regional holidays, and quick jump into Calander.Q.',
-              ms_ac_template: '/widgets/calendar-template.json',
-              data: '/api/widget-data',
-              type: 'application/json',
-              screenshots: [
-                {
-                  src: '/screenshots/widget-desktop-dark.png',
-                  sizes: '1440x900',
-                  label: 'Calander.Q Desktop Widget',
-                },
-              ],
-              icons: [
-                {
-                  src: '/android-chrome-192x192.png',
-                  sizes: '192x192',
-                  type: 'image/png',
-                },
-                {
-                  src: '/android-chrome-512x512.png',
-                  sizes: '512x512',
-                  type: 'image/png',
-                },
-              ],
-              update: 3600,
-              multiple: false,
-            },
           ],
         } as Record<string, unknown>,
         workbox: {
-          importScripts: ['/sw-widgets.js'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
           globIgnores: ['screenshots/**', 'videos/**', 'assets/aistudio/**'],
           navigateFallback: '/index.html',

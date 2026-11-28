@@ -1,3 +1,4 @@
+import { spawn, ChildProcess } from 'child_process';
 import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
@@ -10,7 +11,53 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT) || 3000;
+const PYTHON_PORT = Number(process.env.PYTHON_PORT) || 5001;
 const GMP_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
+
+let pythonProc: ChildProcess | null = null;
+
+function startPythonBackend() {
+  const scriptPath = path.resolve(__dirname, 'server', 'python_backend.py');
+  if (!fs.existsSync(scriptPath)) {
+    console.warn('Python backend script not found:', scriptPath);
+    return;
+  }
+  const cmd = process.platform === 'win32' ? 'python' : 'python3';
+  pythonProc = spawn(cmd, [scriptPath], {
+    env: { ...process.env, PYTHON_PORT: String(PYTHON_PORT) },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  pythonProc.stdout?.on('data', (chunk) => {
+    const line = chunk.toString().trim();
+    if (line) console.log(`[python] ${line}`);
+  });
+  pythonProc.stderr?.on('data', (chunk) => {
+    const line = chunk.toString().trim();
+    if (line && !line.includes('WARNING: This is a development server')) {
+      console.error(`[python] ${line}`);
+    }
+  });
+  pythonProc.on('error', (err) => {
+    console.warn('Failed to start Python backend:', err.message);
+  });
+}
+
+function stopPythonBackend() {
+  if (pythonProc && !pythonProc.killed) {
+    pythonProc.kill();
+    pythonProc = null;
+  }
+}
+
+process.on('exit', stopPythonBackend);
+process.on('SIGINT', () => {
+  stopPythonBackend();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  stopPythonBackend();
+  process.exit(0);
+});
 
 function getMapsApiKey(): string | undefined {
   return (
@@ -668,23 +715,6 @@ async function startServer() {
     });
   });
 
-  // Live data feed for Windows 11 PWA Widgets Board & external OS home-screen widgets
-  app.get('/api/widget-data', (req, res) => {
-    const now = new Date();
-    const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-    const host = req.headers.host || `localhost:${PORT}`;
-    const appUrl = `${proto}://${host}/?open=calendar`;
-    res.setHeader('Cache-Control', 'no-cache');
-    res.json({
-      day: String(now.getDate()),
-      weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
-      monthYear: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      isoDate: now.toISOString().slice(0, 10),
-      summary: '33 World Calendars · Universal Calendar',
-      appUrl,
-    });
-  });
-
   // Landing page waitlist sign-up endpoint
   app.post('/api/waitlist', (req, res) => {
     try {
@@ -756,6 +786,31 @@ async function startServer() {
     }
     res.download(filePath, safeName);
   });
+
+  // ==================== PYTHON BACKEND & AI PROXY ====================
+  startPythonBackend();
+
+  const proxyToPython = async (req: express.Request, res: express.Response) => {
+    try {
+      const targetUrl = `http://127.0.0.1:${PYTHON_PORT}${req.originalUrl}`;
+      const init: RequestInit = {
+        method: req.method,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        init.body = JSON.stringify(req.body ?? {});
+      }
+      const upstream = await fetch(targetUrl, init);
+      const text = await upstream.text();
+      res.status(upstream.status);
+      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+      res.send(text);
+    } catch {
+      res.status(503).json({ error: { message: 'Python backend is starting up. Please retry in a moment.' } });
+    }
+  };
+
+  app.all('/api/python/*', proxyToPython);
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
