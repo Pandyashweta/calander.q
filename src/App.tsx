@@ -1939,6 +1939,7 @@ export default function App() {
                 setSelection({ kind: 'panchang', date, panchang });
                 openRightDrawer();
               }}
+              onSelectDate={(d) => setAnchorDate(d)}
               onCreateEventOnDate={(dateKey) =>
                 handleCreateEventFromRange(dateKey, 10 * 60, 11 * 60)
               }

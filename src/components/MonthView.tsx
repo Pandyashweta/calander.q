@@ -36,6 +36,7 @@ interface MonthViewProps {
   onSelectEvent: (event: CalendarEvent) => void;
   onSelectFestival: (festival: FestivalItem, panchang: GujaratiPanchang) => void;
   onSelectDayPanchang: (date: Date, panchang: GujaratiPanchang) => void;
+  onSelectDate?: (date: Date) => void;
   onCreateEventOnDate: (dateKey: string) => void;
   onZoomToDay: (date: Date) => void;
 }
@@ -57,6 +58,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
   onSelectEvent,
   onSelectFestival,
   onSelectDayPanchang,
+  onSelectDate,
   onCreateEventOnDate,
   onZoomToDay,
 }) => {
@@ -108,6 +110,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
           const dateKey = formatDateKey(day);
           const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
           const isToday = isSameDay(day, today);
+          const isSelectedDay = isSameDay(day, anchorDate);
           const panchang = getGujaratiPanchang(day);
           const dayCalVals = getWorldCalendarsForDate(
             day,
@@ -136,10 +139,13 @@ export const MonthView: React.FC<MonthViewProps> = ({
           return (
             <div
               key={dateKey}
+              onClick={() => onSelectDate?.(day)}
               onDoubleClick={() => onCreateEventOnDate(dateKey)}
-              className={`rounded-[10px] sm:rounded-[12px] p-1 sm:p-2 flex flex-col min-h-0 overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,0.05),0_3px_10px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.09)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.48),0_4px_12px_rgba(0,0,0,0.34)] dark:hover:shadow-[0_6px_18px_rgba(0,0,0,0.55)] transition-all duration-150 ${
+              className={`rounded-[10px] sm:rounded-[12px] p-1 sm:p-2 flex flex-col min-h-0 overflow-hidden cursor-pointer shadow-[0_1px_2px_rgba(15,23,42,0.05),0_3px_10px_rgba(15,23,42,0.04)] hover:shadow-[0_4px_14px_rgba(15,23,42,0.09)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.48),0_4px_12px_rgba(0,0,0,0.34)] dark:hover:shadow-[0_6px_18px_rgba(0,0,0,0.55)] transition-all duration-150 ${
                 isToday
-                  ? 'bg-white dark:bg-[#17171C] ring-1 ring-[#F04422]/30 dark:ring-[#F04422]/50'
+                  ? 'bg-white dark:bg-[#17171C] ring-1 ring-[#F04422]/45 dark:ring-[#F04422]/60'
+                  : isSelectedDay
+                  ? 'bg-white dark:bg-[#17171C] ring-2 ring-[#3B9AE1]/65 dark:ring-[#60A5FA]/65'
                   : isCurrentMonth
                   ? 'bg-white dark:bg-[#131317]'
                   : 'bg-[#F9FAFB]/90 dark:bg-[#0E0E12]'
@@ -148,7 +154,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
               <div className="flex items-start justify-between gap-0.5 sm:gap-1 mb-0.5 sm:mb-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => onZoomToDay(day)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onZoomToDay(day);
+                  }}
                   title="Open day view"
                   className={`text-[11px] sm:text-[12px] tabular-nums leading-none cursor-pointer transition-colors ${
                     isToday
@@ -193,7 +202,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
                         <button
                           key={calVal.id}
                           type="button"
-                          onClick={() => onSelectDayPanchang(day, panchang)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectDayPanchang(day, panchang);
+                          }}
                           title={`${calVal.name}: ${calVal.formatted} · ${calVal.detail}`}
                           className={`text-[9.5px] truncate max-w-[85px] px-1 py-[0.5px] rounded leading-tight cursor-pointer ${
                             calVal.id === 'gujarati-vikram' && gujaratiScript
@@ -234,7 +246,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
                       <button
                         key={item.festival.id}
                         type="button"
-                        onClick={() => onSelectFestival(item.festival, panchang)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectFestival(item.festival, panchang);
+                        }}
                         style={{
                           backgroundColor: theme.bg,
                           color: theme.text,
@@ -269,7 +284,10 @@ export const MonthView: React.FC<MonthViewProps> = ({
                     <button
                       key={ev.id}
                       type="button"
-                      onClick={() => onSelectEvent(ev)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectEvent(ev);
+                      }}
                       style={{
                         backgroundColor: ev.status === 'tentative' ? '#FFFFFF' : theme.bg,
                         color: theme.text,
