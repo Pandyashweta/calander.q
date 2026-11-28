@@ -5,10 +5,7 @@ import {
   Check,
   Copy,
   Download,
-  ExternalLink,
   Laptop,
-  LayoutGrid,
-  Pin,
   Share,
   Smartphone,
   Terminal,
@@ -17,11 +14,7 @@ import { usePWAInstall } from '../hooks/usePWAInstall';
 import {
   DevicePlatform,
   detectDeviceInfo,
-  downloadFloatingDesktopWidget,
-  downloadIosScriptableWidget,
   downloadPlatformAppLauncher,
-  downloadStandaloneWidgetHtml,
-  launchFloatingDesktopWidget,
 } from '../utils/deviceUtils';
 import { LegalDocId } from './LegalModal';
 import { LandingFooter } from './LandingFooter';
@@ -29,7 +22,6 @@ import { LandingFooter } from './LandingFooter';
 interface AppDownloadHubProps {
   onBack: () => void;
   onOpenCalendar: () => void;
-  onLaunchWidget: (mode: 'desktop' | 'mobile') => void;
   onOpenLegal: (doc: LegalDocId) => void;
   onOpenAbout: () => void;
   showToast?: (msg: string) => void;
@@ -43,7 +35,6 @@ const PLATFORMS: Array<{
   label: string;
   category: 'desktop' | 'mobile';
   appSummary: string;
-  widgetSummary: string;
 }> = [
   {
     id: 'windows',
@@ -51,8 +42,6 @@ const PLATFORMS: Array<{
     category: 'desktop',
     appSummary:
       'Download the native Windows setup installer (.exe) or install as a standalone app window with zero browser tabs. Unlocks on-device local & offline mode.',
-    widgetSummary:
-      'Pin a live always-on-top floating widget right on your desktop, download a desktop widget shortcut, or pin into the Windows 11 Widgets Board (Win + W).',
   },
   {
     id: 'macos',
@@ -60,8 +49,6 @@ const PLATFORMS: Array<{
     category: 'desktop',
     appSummary:
       'Install as a standalone macOS Dock & Applications window via Safari (File → Add to Dock), Chrome/Edge/Brave, or the macOS .command app launcher.',
-    widgetSummary:
-      'Pin a live floating desktop widget over your workspace or save a standalone macOS widget launcher.',
   },
   {
     id: 'ios',
@@ -69,8 +56,6 @@ const PLATFORMS: Array<{
     category: 'mobile',
     appSummary:
       'Open in Safari → tap Share → Add to Home Screen. Launches full-screen with its own app icon and unlocks offline local storage.',
-    widgetSummary:
-      'Add a live 2×2, 4×2, or 4×4 Calander.Q widget directly to your iPhone Home Screen using Scriptable.',
   },
   {
     id: 'android',
@@ -78,8 +63,6 @@ const PLATFORMS: Array<{
     category: 'mobile',
     appSummary:
       'Open in Chrome or Brave → tap Install App (or ⋮ → Install app). Android installs a standalone WebAPK into your App Drawer & Home Screen.',
-    widgetSummary:
-      'Place the live chromeless widget directly onto your Android Home Screen via Web Widget, KWGT, or Hermit.',
   },
   {
     id: 'linux',
@@ -87,15 +70,12 @@ const PLATFORMS: Array<{
     category: 'desktop',
     appSummary:
       'Install via Chrome, Edge, or Brave as a standalone desktop window, or save the .desktop launcher to ~/.local/share/applications.',
-    widgetSummary:
-      'Pin a floating desktop widget right onto your desktop or download the standalone Linux widget launcher.',
   },
 ];
 
 export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
   onBack,
   onOpenCalendar,
-  onLaunchWidget,
   onOpenLegal,
   onOpenAbout,
   showToast,
@@ -104,7 +84,7 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [scrolled, setScrolled] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<DevicePlatform>(detected.platform);
-  const [copiedKey, setCopiedKey] = useState<'app' | 'widget' | 'cmd' | null>(null);
+  const [copiedKey, setCopiedKey] = useState<'app' | 'cmd' | null>(null);
   const [windowsInstaller, setWindowsInstaller] = useState<{
     filename: string;
     url: string;
@@ -140,13 +120,11 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const directAppUrl = `${origin}/?open=calendar`;
-  const mobileWidgetEmbedUrl = `${origin}/?widget=mobile&embed=1`;
-  const desktopWidgetEmbedUrl = `${origin}/?widget=desktop&embed=1`;
   const activeMeta = PLATFORMS.find((p) => p.id === selectedPlatform) || PLATFORMS[0];
   const isMobileSelected = activeMeta.category === 'mobile';
   const isCurrentDevice = selectedPlatform === detected.platform;
 
-  const copyText = (text: string, key: 'app' | 'widget' | 'cmd', msg: string) => {
+  const copyText = (text: string, key: 'app' | 'cmd', msg: string) => {
     navigator.clipboard?.writeText(text).then(
       () => {
         setCopiedKey(key);
@@ -162,17 +140,6 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
     const outcome = await install();
     if (outcome === 'accepted') {
       showToast?.('Calander.Q installed as a standalone app! Local & offline mode unlocked.');
-    }
-  };
-
-  const handlePinFloatingWidget = async () => {
-    const res = await launchFloatingDesktopWidget(origin);
-    if (res === 'pip') {
-      showToast?.('Floating desktop widget pinned! Drag it anywhere on your desktop.');
-    } else if (res === 'popup') {
-      showToast?.('Standalone desktop widget window opened.');
-    } else {
-      showToast?.('Popup blocked — use Download Desktop Widget below or allow popups.');
     }
   };
 
@@ -215,9 +182,6 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
               <a href="#standalone-app" className="hover:text-white transition-colors whitespace-nowrap">
                 Standalone App
               </a>
-              <a href="#widgets-setup" className="hover:text-white transition-colors whitespace-nowrap">
-                Widgets
-              </a>
               <a href="#native-builds" className="hover:text-white transition-colors whitespace-nowrap">
                 Native Builds
               </a>
@@ -258,7 +222,7 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
             className="max-w-[760px]"
           >
             <div className="text-[14px] font-mono text-[#858585]">
-              // Download &amp; Widgets · Detected: {detected.label}
+              // Download App · Detected: {detected.label}
               {isInstalled ? ' · Installed App Active' : ''}
             </div>
             <h1 className="mt-3 text-[36px] sm:text-[52px] font-medium tracking-[-0.03em] leading-[1.06]">
@@ -266,8 +230,8 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
               <span className="text-[#858585] block">Run on every device.</span>
             </h1>
             <p className="mt-4 text-[15px] sm:text-[16px] text-[#858585] max-w-[580px] leading-[1.45]">
-              Download the standalone desktop or mobile app to unlock offline local mode, or pin
-              always-on-top calendar widgets on Windows, macOS, Linux, iPhone, and Android.
+              Download the standalone desktop or mobile app to unlock offline local mode on Windows,
+              macOS, Linux, iPhone, and Android.
             </p>
           </motion.div>
 
@@ -325,17 +289,24 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
             className="rounded-[12px] bg-[#0F0F0F] border border-white/[0.14] overflow-hidden grid grid-cols-1 lg:grid-cols-12 items-center"
           >
             <div className="lg:col-span-7 p-6 sm:p-10 space-y-5">
-              <div>
-                <div className="text-[13px] font-mono text-[#858585]">
-                  // Step 1 · Standalone App (Unlocks Local &amp; Offline Mode)
+              <div className="flex items-start gap-4">
+                <img
+                  src="/android-chrome-192x192.png"
+                  alt="Calander.Q app icon"
+                  className="w-14 h-14 rounded-[14px] border border-white/[0.14] bg-[#171615] object-contain shrink-0 shadow-lg"
+                />
+                <div>
+                  <div className="text-[13px] font-mono text-[#858585]">
+                    // Step 1 · Standalone App (Unlocks Local &amp; Offline Mode)
+                  </div>
+                  <h2 className="mt-1.5 text-[24px] sm:text-[28px] font-medium tracking-[-0.02em] text-white">
+                    Download Calander.Q for {activeMeta.label}
+                  </h2>
                 </div>
-                <h2 className="mt-2 text-[24px] sm:text-[28px] font-medium tracking-[-0.02em] text-white">
-                  Download Calander.Q for {activeMeta.label}
-                </h2>
-                <p className="mt-2 text-[14.5px] text-[#858585] leading-[1.5]">
-                  {activeMeta.appSummary}
-                </p>
               </div>
+              <p className="text-[14.5px] text-[#858585] leading-[1.5]">
+                {activeMeta.appSummary}
+              </p>
 
               <div className="flex flex-wrap items-center gap-3">
                 {isInstalled && isCurrentDevice ? (
@@ -500,196 +471,6 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
             </div>
           </motion.div>
 
-          {/* Step 2: Desktop & Home Screen Widgets */}
-          <motion.div
-            id="widgets-setup"
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.55, ease: EASE_OUT_EXPO }}
-            className="rounded-[12px] bg-[#0F0F0F] border border-white/[0.14] overflow-hidden grid grid-cols-1 lg:grid-cols-12 items-center"
-          >
-            <div className="lg:col-span-5 p-4 sm:p-6 order-2 lg:order-1">
-              <div className="relative rounded-none overflow-hidden aspect-[4/3] bg-[#171615] p-4 flex items-center justify-center group">
-                <img
-                  src={LANDSCAPE_BACKDROP}
-                  alt=""
-                  aria-hidden="true"
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                />
-                <div className="relative z-10 w-full h-full rounded-none overflow-hidden border border-white/[0.16] bg-[#0F0F0F] shadow-2xl">
-                  <img
-                    src="/screenshots/widget-desktop-dark.png"
-                    alt="Calander.Q desktop widget preview"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="lg:col-span-7 p-6 sm:p-10 space-y-5 order-1 lg:order-2">
-              <div>
-                <div className="text-[13px] font-mono text-[#858585]">
-                  // Step 2 · Desktop &amp; Home Screen Widgets
-                </div>
-                <h2 className="mt-2 text-[24px] sm:text-[28px] font-medium tracking-[-0.02em] text-white flex items-center gap-2.5">
-                  <LayoutGrid className="w-5 h-5 text-white shrink-0" />
-                  <span>
-                    {selectedPlatform === 'ios'
-                      ? 'Add iPhone / iPad Home Screen Widget'
-                      : selectedPlatform === 'android'
-                      ? 'Add Android Home Screen Widget'
-                      : selectedPlatform === 'windows'
-                      ? 'Floating Desktop Widget & Windows 11 Board'
-                      : `${activeMeta.label} Floating Desktop Widget`}
-                  </span>
-                </h2>
-                <p className="mt-2 text-[14.5px] text-[#858585] leading-[1.5]">
-                  {activeMeta.widgetSummary}
-                </p>
-              </div>
-
-              {selectedPlatform === 'ios' && (
-                <ol className="text-[13px] text-[#858585] space-y-2 list-decimal list-inside bg-[#0A0908] rounded-[8px] p-4 border border-white/[0.08]">
-                  <li>
-                    Download <strong className="text-white">calendar-q-ios-widget.js</strong> below
-                    and open it in the free <strong className="text-white">Scriptable</strong> iOS app.
-                  </li>
-                  <li>
-                    Long-press your <strong className="text-white">iPhone Home Screen</strong> → tap{' '}
-                    <strong className="text-white">+</strong> → select{' '}
-                    <strong className="text-white">Scriptable</strong> (2×2, 4×2, or 4×4).
-                  </li>
-                  <li>
-                    Tap the widget → choose <strong className="text-white">Calander.Q</strong>.
-                  </li>
-                </ol>
-              )}
-
-              {selectedPlatform === 'android' && (
-                <ol className="text-[13px] text-[#858585] space-y-2 list-decimal list-inside bg-[#0A0908] rounded-[8px] p-4 border border-white/[0.08]">
-                  <li>
-                    Copy the <strong className="text-white">Live Widget URL</strong> below.
-                  </li>
-                  <li>
-                    Long-press your <strong className="text-white">Android Home Screen</strong> →{' '}
-                    <strong className="text-white">Widgets</strong> → add{' '}
-                    <strong className="text-white">Hermit</strong> or{' '}
-                    <strong className="text-white">Web Widget</strong> and paste the URL.
-                  </li>
-                </ol>
-              )}
-
-              {selectedPlatform === 'windows' && (
-                <ol className="text-[13px] text-[#858585] space-y-2 list-decimal list-inside bg-[#0A0908] rounded-[8px] p-4 border border-white/[0.08]">
-                  <li>
-                    <strong className="text-white">Always-on-top Floating Widget:</strong> Click{' '}
-                    <strong className="text-white">Pin Floating Desktop Widget</strong> below to pop
-                    out a dark compact widget window, or press <code className="text-white">Ctrl+Shift+Q</code> inside the installed `.exe` app.
-                  </li>
-                  <li>
-                    <strong className="text-white">Windows 11 Widgets Board:</strong> When installed
-                    via Microsoft Edge, press <strong className="text-white">Win + W</strong> → click{' '}
-                    <strong className="text-white">+</strong> → pin{' '}
-                    <strong className="text-white">Calander.Q Today &amp; Month</strong>.
-                  </li>
-                </ol>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                {!isMobileSelected && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void handlePinFloatingWidget()}
-                      className="h-[38px] px-4 rounded-[8px] bg-white hover:bg-[#E4E4E7] text-[#0A0908] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    >
-                      <Pin className="w-3.5 h-3.5" />
-                      <span>Pin Floating Desktop Widget</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        downloadFloatingDesktopWidget(
-                          selectedPlatform as 'windows' | 'macos' | 'linux',
-                          origin
-                        );
-                        showToast?.(`Downloaded ${activeMeta.label} desktop widget launcher.`);
-                      }}
-                      className="h-[38px] px-4 rounded-[8px] bg-[#171615] hover:bg-[#22201E] border border-white/[0.14] text-white text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Download Desktop Widget</span>
-                    </button>
-                  </>
-                )}
-
-                {selectedPlatform === 'ios' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      downloadIosScriptableWidget(origin);
-                      showToast?.('Downloaded iOS Home Screen Widget (calendar-q-ios-widget.js).');
-                    }}
-                    className="h-[38px] px-4 rounded-[8px] bg-white hover:bg-[#E4E4E7] text-[#0A0908] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download iOS Home Widget (.js)</span>
-                  </button>
-                )}
-
-                {selectedPlatform === 'android' && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      copyText(
-                        mobileWidgetEmbedUrl,
-                        'widget',
-                        'Android Home Screen Widget URL copied!'
-                      )
-                    }
-                    className="h-[38px] px-4 rounded-[8px] bg-white hover:bg-[#E4E4E7] text-[#0A0908] text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                  >
-                    {copiedKey === 'widget' ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                    <span>
-                      {copiedKey === 'widget' ? 'Widget URL Copied' : 'Copy Android Widget URL'}
-                    </span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => onLaunchWidget(isMobileSelected ? 'mobile' : 'desktop')}
-                  className="h-[38px] px-4 rounded-[8px] bg-[#0A0908] hover:bg-[#171615] border border-white/[0.14] text-[#D4D4D8] hover:text-white text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Preview Widget</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    downloadStandaloneWidgetHtml(
-                      isMobileSelected ? 'mobile' : 'desktop',
-                      isMobileSelected ? mobileWidgetEmbedUrl : desktopWidgetEmbedUrl,
-                      directAppUrl
-                    );
-                    showToast?.('Saved offline HTML widget file.');
-                  }}
-                  className="h-[38px] px-3.5 rounded-[8px] border border-white/[0.12] hover:bg-white/[0.06] text-[#858585] hover:text-white text-[13px] font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Offline HTML</span>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-
           {/* Native Installer Build Reference */}
           <motion.div
             id="native-builds"
@@ -708,7 +489,7 @@ export const AppDownloadHub: React.FC<AppDownloadHubProps> = ({
                 Desktop setup binaries are compiled with Electron (<code className="text-white">electron/main.cjs</code>{' '}
                 and <code className="text-white">electron-builder.json</code>), producing{' '}
                 <code className="text-white">calander-q-setup-windows-amd64.exe</code> with a native
-                system tray and draggable desktop widget window.
+                system tray.
               </p>
             </div>
             <button

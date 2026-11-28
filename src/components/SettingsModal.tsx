@@ -53,7 +53,6 @@ export type SettingsTab =
   | 'sync'
   | 'shortcuts'
   | 'google'
-  | 'language'
   | 'apps';
 
 export interface LanguageOption {
@@ -534,8 +533,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               { id: 'sync', label: 'Calendar Sync (.ics)', icon: Download },
               { id: 'shortcuts', label: 'Keyboard Shortcuts', icon: Keyboard },
               { id: 'google', label: 'Google Calendar', icon: Calendar },
-              { id: 'language', label: 'Language', icon: Languages },
-              { id: 'apps', label: 'Apps & Widgets', icon: Smartphone },
+              { id: 'apps', label: 'Apps', icon: Smartphone },
             ] as const
           ).map((item) => {
             const Icon = item.icon;
@@ -1459,79 +1457,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ==================== TAB 7: LANGUAGE ==================== */}
-            {tab === 'language' && (
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4 pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
-                  <div>
-                    <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
-                      Language &amp; Localization
-                    </h3>
-                    <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
-                      Choose your preferred interface language.
-                    </p>
-                  </div>
-                  <span className="text-[11.5px] font-medium text-[#185D8F] dark:text-[#60A5FA] shrink-0">
-                    {SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage)?.nativeName || 'English'}
-                  </span>
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Search supported languages..."
-                  value={langFilter}
-                  onChange={(e) => setLangFilter(e.target.value)}
-                  className="w-full bg-white dark:bg-[#1A1A20] border border-[#DCDCDC] dark:border-[#2E2E36] rounded-md px-3 py-1.5 text-[12px] text-[#1A1A1A] dark:text-[#F4F4F5] placeholder:text-[#A3A3A3] dark:placeholder:text-[#71717A] focus:outline-none focus:border-[#185D8F]"
-                />
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[340px] overflow-y-auto cal-scroll pr-1">
-                  {SUPPORTED_LANGUAGES.filter(
-                    (l) =>
-                      !langFilter ||
-                      l.name.toLowerCase().includes(langFilter.toLowerCase()) ||
-                      l.nativeName.toLowerCase().includes(langFilter.toLowerCase()) ||
-                      l.region.toLowerCase().includes(langFilter.toLowerCase())
-                  ).map((lang) => {
-                    const isSelected = selectedLanguage === lang.code;
-                    return (
-                      <button
-                        key={lang.code}
-                        type="button"
-                        onClick={() => onSelectLanguage?.(lang.code)}
-                        className={`text-left p-2.5 rounded-lg border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
-                          isSelected
-                            ? 'bg-[#F0F9FF] dark:bg-sky-950/40 border-[#0284C7] dark:border-sky-500/70'
-                            : 'bg-white dark:bg-[#1A1A20] border-[#E5E7EB] dark:border-[#27272E] hover:bg-[#F9FAFB] dark:hover:bg-[#22222A]'
-                        }`}
-                      >
-                        <div className="min-w-0">
-                          <div className="text-[12.5px] font-semibold text-[#111827] dark:text-[#F4F4F5] truncate">
-                            {lang.nativeName}{' '}
-                            <span className="text-[11px] font-normal text-[#6B7280] dark:text-[#A1A1AA]">
-                              ({lang.name})
-                            </span>
-                          </div>
-                          <div className="text-[10.5px] text-[#6B7280] dark:text-[#71717A] truncate">
-                            {lang.region}
-                          </div>
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-[#0284C7] dark:text-sky-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ==================== TAB 8: APPS & WIDGETS ==================== */}
+            {/* ==================== TAB 8: APPS ==================== */}
             {tab === 'apps' && (
               <div className="space-y-4">
                 <div className="pb-3 border-b border-[#EFEFEF] dark:border-[#24242B]">
                   <h3 className="text-[14px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
-                    Desktop &amp; Mobile Apps + Widgets
+                    Desktop &amp; Mobile Apps
                   </h3>
                   <p className="text-[12px] text-[#737373] dark:text-[#A1A1AA] mt-0.5">
-                    Install calendar.q directly on your Mac, Windows PC, Linux desktop, iPhone, or Android phone, and launch standalone desktop or mobile widgets.
+                    Install calendar.q directly on your Mac, Windows PC, Linux desktop, iPhone, or Android phone for standalone offline access.
                   </p>
                 </div>
 
@@ -1539,19 +1473,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] space-y-2">
                     <Monitor className="w-5 h-5 text-[#1A1A1A] dark:text-[#F4F4F5]" />
                     <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
-                      Desktop App &amp; Widget
+                      Desktop App
                     </div>
                     <p className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] leading-relaxed">
-                      Native PWA window, OS app launchers (macOS, Windows, Linux), and a standalone live desktop widget.
+                      Native PWA window and OS app launchers (macOS, Windows, Linux) with zero browser tabs.
                     </p>
                   </div>
                   <div className="p-4 rounded-xl border border-[#E5E5E5] dark:border-[#27272E] bg-[#FAFAFA] dark:bg-[#1A1A20] space-y-2">
                     <Smartphone className="w-5 h-5 text-[#1A1A1A] dark:text-[#F4F4F5]" />
                     <div className="text-[13px] font-semibold text-[#1A1A1A] dark:text-[#F4F4F5]">
-                      Mobile App &amp; Home Widget
+                      Mobile App
                     </div>
                     <p className="text-[11.5px] text-[#666666] dark:text-[#A1A1AA] leading-relaxed">
-                      Installable offline-ready iOS &amp; Android app with compact 2×2, 4×2, and 4×4 live mobile widgets.
+                      Installable offline-ready iOS &amp; Android app right on your Home Screen.
                     </p>
                   </div>
                 </div>
@@ -1563,7 +1497,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="px-4 py-2.5 rounded-lg bg-[#1A1A1A] dark:bg-[#F4F4F5] hover:bg-[#333333] dark:hover:bg-white text-white dark:text-[#09090B] text-[12.5px] font-medium inline-flex items-center gap-2 cursor-pointer transition-colors"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Open Device Download &amp; Widget Hub</span>
+                    <span>Open Device Download Hub</span>
                   </button>
                 )}
               </div>

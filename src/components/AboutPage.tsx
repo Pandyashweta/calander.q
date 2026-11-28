@@ -39,7 +39,7 @@ const PRINCIPLES = [
     icon: HardDrive,
     title: 'Web sync or standalone offline app',
     description:
-      'Use Calander.Q immediately in any browser with account & Google Calendar sync, or install the standalone desktop/mobile app to unlock on-device offline storage and widgets.',
+      'Use Calander.Q immediately in any browser with account & Google Calendar sync, or install the standalone desktop/mobile app to unlock on-device offline storage.',
   },
 ];
 
@@ -105,13 +105,6 @@ export const AboutPage: React.FC<AboutPageProps> = ({
               >
                 Download App
               </button>
-              <button
-                type="button"
-                onClick={() => onOpenLegal('contact')}
-                className="hover:text-white transition-colors cursor-pointer whitespace-nowrap"
-              >
-                Contact
-              </button>
             </nav>
 
             <motion.button
@@ -176,7 +169,7 @@ export const AboutPage: React.FC<AboutPageProps> = ({
                 whileTap={{ scale: 0.98 }}
                 className="h-[40px] px-5 rounded-[8px] bg-[#0F0F0F] hover:bg-[#171615] border border-white/[0.14] text-white text-[14px] font-medium transition-colors cursor-pointer"
               >
-                Download App &amp; Widgets
+                Download App
               </motion.button>
             </div>
           </motion.div>

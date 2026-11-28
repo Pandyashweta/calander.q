@@ -1,10 +1,9 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, globalShortcut, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage } = require('electron');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
 
 let mainWindow = null;
-let widgetWindow = null;
 let tray = null;
 let staticServer = null;
 let serverUrl = process.env.CALENDAR_Q_URL || '';
@@ -32,22 +31,6 @@ function startEmbeddedDistServer() {
   return new Promise((resolve) => {
     staticServer = http.createServer((req, res) => {
       const reqUrl = new URL(req.url || '/', 'http://127.0.0.1');
-
-      if (reqUrl.pathname === '/api/widget-data') {
-        const now = new Date();
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
-        res.end(
-          JSON.stringify({
-            day: String(now.getDate()),
-            weekday: now.toLocaleDateString('en-US', { weekday: 'long' }),
-            monthYear: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-            isoDate: now.toISOString().slice(0, 10),
-            summary: '33 World Calendars · Desktop App',
-            appUrl: `${serverUrl}/?open=calendar`,
-          })
-        );
-        return;
-      }
 
       const relPath = decodeURIComponent(reqUrl.pathname === '/' ? '/index.html' : reqUrl.pathname).replace(/^\/+/, '');
       let filePath = path.join(distDir, relPath);
@@ -97,49 +80,9 @@ function createMainWindow() {
   });
 }
 
-function toggleDesktopWidget() {
-  if (widgetWindow && !widgetWindow.isDestroyed()) {
-    if (widgetWindow.isVisible()) {
-      widgetWindow.hide();
-    } else {
-      widgetWindow.show();
-    }
-    return true;
-  }
-
-  widgetWindow = new BrowserWindow({
-    width: 390,
-    height: 490,
-    frame: false,
-    resizable: true,
-    alwaysOnTop: true,
-    skipTaskbar: false,
-    icon: getAppIconPath(),
-    backgroundColor: '#0A0908',
-    title: 'Calander.Q Widget',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  widgetWindow.loadURL(`${serverUrl}/?widget=desktop&embed=1`);
-  widgetWindow.on('closed', () => {
-    widgetWindow = null;
-  });
-  return true;
-}
-
-ipcMain.handle('calanderq:toggle-widget', () => toggleDesktopWidget());
-
 app.whenReady().then(async () => {
   await startEmbeddedDistServer();
-  if (process.argv.includes('--widget')) {
-    toggleDesktopWidget();
-  } else {
-    createMainWindow();
-  }
+  createMainWindow();
 
   try {
     const icon = nativeImage.createFromPath(getAppIconPath()).resize({ width: 16, height: 16 });
@@ -148,7 +91,6 @@ app.whenReady().then(async () => {
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open Calander.Q', click: () => (mainWindow ? mainWindow.show() : createMainWindow()) },
-        { label: 'Toggle Desktop Widget', click: toggleDesktopWidget },
         { type: 'separator' },
         { label: 'Quit', click: () => app.quit() },
       ])
@@ -156,8 +98,6 @@ app.whenReady().then(async () => {
   } catch {
     // Tray optional if icon unavailable
   }
-
-  globalShortcut.register('CommandOrControl+Shift+Q', toggleDesktopWidget);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

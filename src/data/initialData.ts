@@ -29,15 +29,6 @@ export const INITIAL_LAYERS: CalendarLayer[] = [
 
   // World Calendar Overlay Layers (organized inside the World Calendars section, OFF by default)
   {
-    id: 'gujarati-calendar',
-    name: 'Gujarati Calendar & Tithis',
-    groupId: 'world-calendars',
-    color: 'marigold',
-    visible: false,
-    type: 'world',
-    description: 'Vikram Samvat Tithi (Sud/Vad), Uttarayan, Bestu Varas, Agiyaras, Poonam, Amas & Vrats',
-  },
-  {
     id: 'world-observances',
     name: 'World Calendar Festivals',
     groupId: 'world-calendars',
@@ -54,6 +45,15 @@ export const INITIAL_LAYERS: CalendarLayer[] = [
     visible: false,
     type: 'world',
     description: 'UN observances, global awareness, science & cultural days worldwide',
+  },
+  {
+    id: 'gujarati-calendar',
+    name: 'Gujarati Calendar & Tithis',
+    groupId: 'world-calendars',
+    color: 'marigold',
+    visible: false,
+    type: 'world',
+    description: 'Vikram Samvat Tithi (Sud/Vad), Uttarayan, Bestu Varas, Agiyaras, Poonam, Amas & Vrats',
   },
 
   // Clean Local Calendars (stored on this device; unchecked on clean sign-in, auto-enabled when adding an event)
